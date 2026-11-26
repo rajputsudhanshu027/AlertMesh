@@ -17,6 +17,7 @@ import smtplib
 import sqlite3
 import sys
 import uuid
+from urllib.parse import parse_qs
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from email.message import EmailMessage
@@ -25,6 +26,7 @@ from typing import Callable
 from wsgiref.simple_server import make_server
 
 from .service import AlertMesh, Person, Place, SEVERITY
+from .geocoding import Geocoder, NominatimGeocoder, OSM_ATTRIBUTION, RADIUS_PRESETS_KM
 
 
 class _DiscardEmail:
@@ -70,10 +72,11 @@ class SMTPVerificationMailer(VerificationMailer):
 class AlertMeshAPI:
     """WSGI API with durable account, place, session, and inbox storage."""
 
-    def __init__(self, database: str | None = None, mailer: VerificationMailer | None = None, *, clock: Callable[[], datetime] = _now) -> None:
+    def __init__(self, database: str | None = None, mailer: VerificationMailer | None = None, *, clock: Callable[[], datetime] = _now, geocoder: Geocoder | None = None) -> None:
         self.database = database or os.environ.get("ALERTMESH_DB_PATH", "alertmesh.sqlite3")
         self.mailer = mailer
         self.clock = clock
+        self.geocoder = geocoder or NominatimGeocoder()
         self.flow = AlertMesh(_DiscardEmail(), db_path=database)
         self._initialize()
         self._sync_domain()
@@ -189,6 +192,16 @@ class AlertMeshAPI:
                 db.execute("DELETE FROM api_sessions WHERE token_hash=?", (token_hash,))
             return {"logged_out": True}, 200
         person_id, _ = self._authenticate(environ)
+        if path == "/api/geocode" and method == "GET":
+            query = parse_qs(environ.get("QUERY_STRING", "")).get("q", [""])[0].strip()
+            if not query or len(query) > 200:
+                raise APIError(400, "q must contain between 1 and 200 characters")
+            try:
+                results = self.geocoder.search(query)
+            except Exception:
+                raise APIError(503, "Geocoding service is unavailable")
+            allowed_results = [place for place in results if place.is_contiguous_us]
+            return {"results": [self._geocode_json(place) for place in allowed_results], "attribution": OSM_ATTRIBUTION}, 200
         if path == "/api/me" and method == "GET":
             return self._person(person_id), 200
         if path == "/api/me" and method == "DELETE":
@@ -333,6 +346,7 @@ class AlertMeshAPI:
 
     def _create_place(self, person_id, body):
         data = self._validated_place(body, creating=True)
+        self._require_contiguous_us(data["latitude"], data["longitude"])
         place_id = str(uuid.uuid4())
         place = Place(id=place_id, person_id=person_id, added_at=self.clock(), **data)
         try:
@@ -348,7 +362,9 @@ class AlertMeshAPI:
             raise APIError(404, "Place not found")
         current = self._place_json(existing)
         current.update(body)
-        data = self._validated_place(current, creating=False)
+        data = self._validated_place(current, creating=False, validate_radius="radius_km" in body)
+        if (data["latitude"], data["longitude"]) != (existing.latitude, existing.longitude):
+            self._require_contiguous_us(data["latitude"], data["longitude"])
         updated = Place(id=place_id, person_id=person_id, added_at=existing.added_at, **data)
         try:
             self.flow.update_place(updated)
@@ -392,7 +408,7 @@ class AlertMeshAPI:
         return {"alerts": alerts, "sources": source_status}
 
     @staticmethod
-    def _validated_place(body, *, creating):
+    def _validated_place(body, *, creating, validate_radius=True):
         fields = {"name", "latitude", "longitude", "radius_km", "weather_enabled", "earthquake_enabled", "minimum_severity"}
         required = {"name", "latitude", "longitude"}
         if creating and not required.issubset(body):
@@ -417,14 +433,29 @@ class AlertMeshAPI:
             raise APIError(400, "Coordinates and radius must be finite numbers")
         if not -90 <= data["latitude"] <= 90 or not -180 <= data["longitude"] <= 180:
             raise APIError(400, "Coordinates are outside valid latitude/longitude bounds")
-        if data["radius_km"] <= 0 or data["radius_km"] > 500:
-            raise APIError(400, "Radius must be greater than 0 and no more than 500 km")
+        if creating or validate_radius:
+            if data["radius_km"] <= 0 or data["radius_km"] > 500:
+                raise APIError(400, "Radius must be greater than 0 and no more than 500 km")
+            if data["radius_km"] not in RADIUS_PRESETS_KM:
+                raise APIError(400, f"radius_km must be one of: {', '.join(map(str, RADIUS_PRESETS_KM))} km")
         for key in ("weather_enabled", "earthquake_enabled"):
             if not isinstance(data.get(key), bool):
                 raise APIError(400, f"{key} must be a boolean")
         if data.get("minimum_severity") not in SEVERITY:
             raise APIError(400, "minimum_severity must be unknown, minor, moderate, severe, or extreme")
         return data
+
+    def _require_contiguous_us(self, latitude, longitude):
+        try:
+            place = self.geocoder.reverse(latitude, longitude)
+        except Exception:
+            raise APIError(503, "Could not verify the Place location right now")
+        if place is None or not place.is_contiguous_us:
+            raise APIError(400, "Places must be in the contiguous United States")
+
+    @staticmethod
+    def _geocode_json(place):
+        return {"name": place.name, "latitude": place.latitude, "longitude": place.longitude, "state_code": place.state_code}
 
     @staticmethod
     def _place_json(place):

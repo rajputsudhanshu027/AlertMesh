@@ -7,6 +7,7 @@ from unittest.mock import patch
 
 from alertmesh import Alert, AlertMesh
 from alertmesh.api import AlertMeshAPI, VerificationMailer
+from alertmesh.geocoding import GeocodedPlace
 
 
 class FakeMailer(VerificationMailer):
@@ -21,22 +22,44 @@ class FakeMailer(VerificationMailer):
         self.alerts.append((to, subject, body))
 
 
+class FakeGeocoder:
+    def __init__(self):
+        self.fail = False
+        self.results = [GeocodedPlace("Washington, Virginia, United States", 38, -77, "US-VA")]
+
+    def search(self, query):
+        if self.fail:
+            raise OSError("provider unavailable")
+        return self.results if "washington" in query.lower() else []
+
+    def reverse(self, latitude, longitude):
+        if (latitude, longitude) == (64.0, -150.0):
+            return GeocodedPlace("Alaska, United States", latitude, longitude, "US-AK")
+        if (latitude, longitude) == (21.0, -157.0):
+            return GeocodedPlace("Hawaii, United States", latitude, longitude, "US-HI")
+        if (latitude, longitude) == (38.0, -77.0):
+            return self.results[0]
+        return None
+
+
 class APITests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.mailer = FakeMailer()
+        self.geocoder = FakeGeocoder()
         self.now = datetime(2026, 1, 1, tzinfo=timezone.utc)
-        self.app = AlertMeshAPI(f"{self.temp.name}/test.sqlite3", self.mailer, clock=lambda: self.now)
+        self.app = AlertMeshAPI(f"{self.temp.name}/test.sqlite3", self.mailer, clock=lambda: self.now, geocoder=self.geocoder)
 
     def tearDown(self):
         self.app.close()
         self.temp.cleanup()
 
-    def request(self, method, path, body=None, token=None):
+    def request(self, method, path, body=None, token=None, query=""):
         raw = json.dumps(body or {}).encode()
         environ = {
             "REQUEST_METHOD": method,
             "PATH_INFO": path,
+            "QUERY_STRING": query,
             "CONTENT_LENGTH": str(len(raw)),
             "CONTENT_TYPE": "application/json",
             "wsgi.input": io.BytesIO(raw),
@@ -78,7 +101,7 @@ class APITests(unittest.TestCase):
         self.assertEqual((status, updated["name"], updated["earthquake_enabled"]), (200, "Office", False))
         database = self.app.database
         self.app.close()
-        self.app = AlertMeshAPI(database, self.mailer, clock=lambda: self.now)
+        self.app = AlertMeshAPI(database, self.mailer, clock=lambda: self.now, geocoder=self.geocoder)
         status, places = self.request("GET", "/api/places", token=token)
         self.assertEqual(places["places"][0]["name"], "Office")
         self.assertEqual(self.request("DELETE", f"/api/places/{place_id}", token=token)[0], 200)
@@ -114,6 +137,32 @@ class APITests(unittest.TestCase):
         self.assertIn("Coordinates", error["error"])
         self.assertEqual(self.request("DELETE", "/api/me", token=token)[0], 200)
         self.assertEqual(self.request("GET", "/api/me", token=token)[0], 401)
+
+    def test_geocoder_lookup_handles_results_empty_and_provider_errors(self):
+        token = self.register_and_login()
+        status, result = self.request("GET", "/api/geocode", token=token, query="q=Washington")
+        self.assertEqual(status, 200)
+        self.assertEqual(result["results"][0]["state_code"], "US-VA")
+        self.assertIn("OpenStreetMap", result["attribution"])
+        self.geocoder.results.append(GeocodedPlace("Honolulu, Hawaii, United States", 21, -157, "US-HI"))
+        status, result = self.request("GET", "/api/geocode", token=token, query="q=Washington")
+        self.assertEqual((status, len(result["results"])), (200, 1))
+        self.assertEqual(self.request("GET", "/api/geocode", token=token, query="q=Atlantis")[1]["results"], [])
+        self.geocoder.fail = True
+        status, error = self.request("GET", "/api/geocode", token=token, query="q=Washington")
+        self.assertEqual(status, 503)
+        self.assertIn("unavailable", error["error"])
+
+    def test_place_must_be_contiguous_us_and_use_radius_preset(self):
+        token = self.register_and_login()
+        status, error = self.request("POST", "/api/places", {"name": "Alaska", "latitude": 64, "longitude": -150}, token)
+        self.assertEqual(status, 400)
+        self.assertIn("contiguous", error["error"])
+        status, error = self.request("POST", "/api/places", {"name": "Hawaii", "latitude": 21, "longitude": -157}, token)
+        self.assertEqual(status, 400)
+        status, error = self.request("POST", "/api/places", {"name": "Home", "latitude": 38, "longitude": -77, "radius_km": 20}, token)
+        self.assertEqual(status, 400)
+        self.assertIn("one of", error["error"])
 
     def test_api_place_matches_ingested_alert_and_inbox_reads_shared_flow(self):
         token = self.register_and_login()
