@@ -11,6 +11,7 @@ import hmac
 import json
 import math
 import os
+import re
 import secrets
 import smtplib
 import sqlite3
@@ -216,7 +217,7 @@ class AlertMeshAPI:
     def _register(self, body):
         email = self._required_text(body, "email").strip().lower()
         password = self._required_text(body, "password")
-        if len(email) > 254 or "@" not in email or email.startswith("@") or email.endswith("@"):
+        if len(email) > 254 or re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email) is None:
             raise APIError(400, "Enter a valid email address")
         if len(password) < 12 or len(password) > 1024:
             raise APIError(400, "Password must be between 12 and 1024 characters")
@@ -233,7 +234,12 @@ class AlertMeshAPI:
                 db.execute("INSERT INTO api_verification_tokens(token_hash,person_id,expires_at) VALUES(?,?,?)", (self._token_hash(raw_token), person_id, (now + timedelta(hours=24)).isoformat()))
             except sqlite3.IntegrityError:
                 raise APIError(409, "An account with this email already exists")
-        self.flow.add_person(Person(person_id, email))
+        try:
+            self.flow.add_person(Person(person_id, email))
+        except Exception:
+            with self._connect() as db:
+                db.execute("DELETE FROM api_people WHERE id=?", (person_id,))
+            raise APIError(503, "Could not create account; please try again")
         try:
             self.mailer.send_verification(email, raw_token)
         except Exception:
@@ -255,7 +261,14 @@ class AlertMeshAPI:
                 raise APIError(400, "Verification token is invalid or expired")
             db.execute("UPDATE api_people SET verified_at=? WHERE id=?", (now.isoformat(), row["person_id"]))
             person_id = row["person_id"]
-        self.flow.verify_person(person_id)
+            expires_at = row["expires_at"]
+        try:
+            self.flow.verify_person(person_id)
+        except Exception:
+            with self._connect() as db:
+                db.execute("UPDATE api_people SET verified_at=NULL WHERE id=?", (person_id,))
+                db.execute("INSERT OR REPLACE INTO api_verification_tokens(token_hash,person_id,expires_at) VALUES(?,?,?)", (self._token_hash(raw_token), person_id, expires_at))
+            raise APIError(503, "Could not verify account; please try again")
         return {"verified": True}
 
     def _login(self, body):

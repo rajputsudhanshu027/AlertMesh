@@ -92,6 +92,12 @@ class APITests(unittest.TestCase):
         status, _ = self.request("PATCH", f"/api/places/{place['id']}", {"name": "Stolen"}, second_token)
         self.assertEqual(status, 404)
 
+    def test_registration_rejects_malformed_email(self):
+        status, error = self.request("POST", "/api/register", {"email": "a@@b", "password": "a-strong-password"})
+        self.assertEqual(status, 400)
+        self.assertIn("valid email", error["error"])
+        self.assertEqual(self.mailer.sent, [])
+
     def test_invalid_place_and_account_deletion(self):
         token = self.register_and_login()
         status, error = self.request("POST", "/api/places", {"name": "Bad", "latitude": 100, "longitude": 0}, token)
