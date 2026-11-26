@@ -226,7 +226,6 @@ class AlertMesh:
                     should_send = sent_revision is None or (previous is not None and revision != sent_revision)
                     if should_send:
                         self._deliver(person, alert, key, "New alert" if sent_revision is None else "Alert update")
-                        self._emailed_revision[key] = revision
             elif entry:
                 # Preserve historical match, but remove deleted/disabled places from current view.
                 entry.place_ids = {pid for pid in entry.place_ids if pid in self.places}
@@ -308,6 +307,7 @@ class AlertMesh:
             places = ", ".join(sorted(self.places[i].name for i in self.inbox[key].place_ids if i in self.places))
             self.email.send(person.email, f"{subject}: {alert.title}", f"{alert.title}\nAffected places: {places}")
             self.delivery_status[key] = "sent"
+            self._emailed_revision[key] = self._material_revision(alert)
             self.metrics.increment("delivery.sent")
             if retry:
                 self.metrics.increment("delivery.retry_successes")

@@ -98,7 +98,7 @@ def run_demo() -> dict[str, int]:
         terminal_retained = any(e.alert_id == "usgs:demo-expired" for e in replay_inbox_before_delete)
         cancellation_retained = any(e.alert_id == "usgs:demo-cancelled" for e in replay_inbox_before_delete)
         retry_sent = len(mail.messages) == messages_before_retry + 1 and any(
-            subject == "Alert update: Retry demo earthquake" for _, subject, _ in mail.messages[messages_before_retry:]
+            subject == "New alert: Retry demo earthquake" for _, subject, _ in mail.messages[messages_before_retry:]
         )
         quake_entry = next(e for e in replay_inbox_before_delete if e.alert_id == "usgs:demo-quake")
 

@@ -100,7 +100,7 @@ class AlertMeshFlowTests(unittest.TestCase):
         self.app.retry_failed_deliveries()
         self.assertEqual(self.app.delivery_status[("p1", "usgs:3")], "sent")
         self.assertEqual(len(self.mail.messages), 1)
-        self.assertIn("Alert update: Quake", self.mail.messages[0][1])
+        self.assertIn("New alert: Quake", self.mail.messages[0][1])
         metrics = self.app.metrics.snapshot()
         self.assertEqual((metrics["delivery.attempts"], metrics["delivery.failed"], metrics["delivery.sent"]), (2, 1, 1))
         self.assertEqual((metrics["delivery.retries"], metrics["delivery.retry_successes"]), (1, 1))
