@@ -51,11 +51,14 @@ class SMTPVerificationMailer(VerificationMailer):
         self.username, self.password, self.starttls = username, password, starttls
 
     def send_verification(self, email: str, token: str) -> None:
+        self.send(email, "Verify your AlertMesh email", f"Your AlertMesh verification token is: {token}\n\nIt expires in 24 hours.")
+
+    def send(self, to: str, subject: str, body: str) -> None:
         message = EmailMessage()
-        message["Subject"] = "Verify your AlertMesh email"
+        message["Subject"] = subject
         message["From"] = self.sender
-        message["To"] = email
-        message.set_content(f"Your AlertMesh verification token is: {token}\n\nIt expires in 24 hours.")
+        message["To"] = to
+        message.set_content(body)
         with smtplib.SMTP(self.host, self.port, timeout=10) as smtp:
             if self.starttls:
                 smtp.starttls()

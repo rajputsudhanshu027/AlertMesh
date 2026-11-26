@@ -232,6 +232,14 @@ class AlertMesh:
             self.source_stale[source] = True
             self._persist()
 
+    def mark_source_checked(self, source: str, checked_at: datetime | None = None) -> None:
+        """Record a successful feed check, including an empty result."""
+        with self._store.transaction():
+            self._reload()
+            self.last_checked[source] = checked_at or utcnow()
+            self.source_stale[source] = False
+            self._persist()
+
     def source_status(self, source: str) -> dict:
         self.refresh()
         return {"source": source, "stale": self.source_stale.get(source, True), "last_checked": self.last_checked.get(source)}
