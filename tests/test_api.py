@@ -14,8 +14,11 @@ class FakeMailer(VerificationMailer):
     def __init__(self):
         self.sent = []
         self.alerts = []
+        self.fail_verification = False
 
     def send_verification(self, email, token):
+        if self.fail_verification:
+            raise OSError("mail service unavailable")
         self.sent.append((email, token))
 
     def send(self, to, subject, body):
@@ -54,7 +57,7 @@ class APITests(unittest.TestCase):
         self.app.close()
         self.temp.cleanup()
 
-    def request(self, method, path, body=None, token=None, query=""):
+    def request(self, method, path, body=None, token=None, query="", cookie=None, browser=False):
         raw = json.dumps(body or {}).encode()
         environ = {
             "REQUEST_METHOD": method,
@@ -66,6 +69,10 @@ class APITests(unittest.TestCase):
         }
         if token:
             environ["HTTP_AUTHORIZATION"] = f"Bearer {token}"
+        if cookie:
+            environ["HTTP_COOKIE"] = cookie
+        if browser:
+            environ["HTTP_X_ALERTMESH_BROWSER"] = "session-cookie"
         captured = {}
 
         def start_response(status, headers):
@@ -73,7 +80,51 @@ class APITests(unittest.TestCase):
             captured["headers"] = headers
 
         response = b"".join(self.app(environ, start_response))
+        self.last_headers = dict(captured["headers"])
         return captured["status"], json.loads(response)
+
+    def test_browser_session_cookie_authenticates_and_logout_clears_it(self):
+        self.request("POST", "/api/register", {"email": "browser@example.com", "password": "a-strong-password"})
+        token = self.mailer.sent[-1][1]
+        self.request("POST", "/api/verify", {"token": token})
+        status, result = self.request("POST", "/api/login", {"email": "browser@example.com", "password": "a-strong-password"}, browser=True)
+        self.assertEqual(status, 200)
+        cookie = self.last_headers["Set-Cookie"]
+        self.assertIn("HttpOnly", cookie)
+        self.assertIn("SameSite=Lax", cookie)
+        self.assertNotIn("access_token", result)
+        session_cookie = cookie.split(";", 1)[0]
+        self.assertEqual(self.request("GET", "/api/me", cookie=session_cookie)[0], 200)
+        self.assertEqual(self.request("POST", "/api/logout", cookie=session_cookie)[0], 200)
+        self.assertIn("Max-Age=0", self.last_headers["Set-Cookie"])
+        self.assertEqual(self.request("GET", "/api/me", cookie=session_cookie)[0], 401)
+
+    def test_browser_sessions_are_isolated_between_people(self):
+        first = self.register_and_login("first-browser@example.com")
+        first_cookie = f"alertmesh_session={first}"
+        second = self.register_and_login("second-browser@example.com")
+        second_cookie = f"alertmesh_session={second}"
+        self.assertEqual(self.request("GET", "/api/me", cookie=first_cookie)[1]["email"], "first-browser@example.com")
+        self.assertEqual(self.request("GET", "/api/me", cookie=second_cookie)[1]["email"], "second-browser@example.com")
+        self.request("POST", "/api/logout", cookie=first_cookie)
+        self.assertEqual(self.request("GET", "/api/me", cookie=first_cookie)[0], 401)
+        self.assertEqual(self.request("GET", "/api/me", cookie=second_cookie)[0], 200)
+
+    def test_browser_page_offers_account_access_and_retains_public_demo(self):
+        captured = {}
+        environ = {"REQUEST_METHOD": "GET", "PATH_INFO": "/", "CONTENT_LENGTH": "0", "wsgi.input": io.BytesIO(b"")}
+
+        def start_response(status, headers):
+            captured["status"] = int(status.split()[0])
+
+        page = b"".join(self.app(environ, start_response)).decode()
+        self.assertEqual(captured["status"], 200)
+        self.assertIn('id="account-access"', page)
+        self.assertIn('data-auth-mode="register"', page)
+        self.assertIn('data-auth-mode="verify"', page)
+        self.assertIn('data-auth-mode="resend"', page)
+        self.assertIn('id="return-demo"', page)
+        self.assertIn('loadDemo();', page)
 
     def register_and_login(self, email="person@example.com"):
         status, result = self.request("POST", "/api/register", {"email": email, "password": "a-strong-password"})
@@ -205,6 +256,18 @@ class APITests(unittest.TestCase):
         status, result = self.request("POST", "/api/verify", {"token": self.mailer.sent[-1][1]})
         self.assertEqual(status, 400)
         self.assertIn("expired", result["error"])
+        status, result = self.request("POST", "/api/resend-verification", {"email": "late@example.com", "password": "a-strong-password"})
+        self.assertEqual(status, 200)
+        self.assertIn("fresh verification token", result["message"])
+        status, result = self.request("POST", "/api/verify", {"token": self.mailer.sent[-1][1]})
+        self.assertEqual((status, result["verified"]), (200, True))
+
+    def test_verification_delivery_failure_has_recovery_message(self):
+        self.mailer.fail_verification = True
+        status, result = self.request("POST", "/api/register", {"email": "offline@example.com", "password": "a-strong-password"})
+        self.assertEqual(status, 503)
+        self.assertIn("Could not send verification email", result["error"])
+        self.assertIn("try again", result["error"])
 
 
 if __name__ == "__main__":

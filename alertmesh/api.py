@@ -103,6 +103,10 @@ class AlertMeshAPI:
             response, status = {"error": str(error) or "Invalid request"}, 400
         except Exception:
             response, status = {"error": "Internal server error"}, 500
+        browser_session_token = None
+        browser_login = environ.get("HTTP_X_ALERTMESH_BROWSER") == "session-cookie"
+        if method == "POST" and path == "/api/login" and status == 200 and browser_login:
+            browser_session_token = response.pop("access_token", None)
         self._api_latencies_ms.append((time.perf_counter() - started) * 1000)
         if isinstance(response, str):
             encoded = response.encode("utf-8")
@@ -110,7 +114,13 @@ class AlertMeshAPI:
         else:
             encoded = json.dumps(response, separators=(",", ":")).encode("utf-8")
             content_type = "application/json; charset=utf-8"
-        start_response(f"{status} {HTTPStatus(status).phrase}", [("Content-Type", content_type), ("Content-Length", str(len(encoded))), ("Cache-Control", "no-store")])
+        headers = [("Content-Type", content_type), ("Content-Length", str(len(encoded))), ("Cache-Control", "no-store")]
+        if browser_session_token:
+            secure = "; Secure" if environ.get("wsgi.url_scheme") == "https" else ""
+            headers.append(("Set-Cookie", f"alertmesh_session={browser_session_token}; HttpOnly; SameSite=Lax; Path=/; Max-Age={30 * 24 * 60 * 60}{secure}"))
+        elif method == "POST" and path == "/api/logout" and status == 200:
+            headers.append(("Set-Cookie", "alertmesh_session=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0"))
+        start_response(f"{status} {HTTPStatus(status).phrase}", headers)
         return [encoded]
 
     @contextmanager
@@ -202,6 +212,8 @@ class AlertMeshAPI:
             return self._register(body), 201
         if path == "/api/verify" and method == "POST":
             return self._verify(body), 200
+        if path == "/api/resend-verification" and method == "POST":
+            return self._resend_verification(body), 200
         if path == "/api/login" and method == "POST":
             return self._login(body), 200
         if path == "/api/logout" and method == "POST":
@@ -319,6 +331,31 @@ class AlertMeshAPI:
             raise APIError(503, "Could not verify account; please try again")
         return {"verified": True}
 
+    def _resend_verification(self, body):
+        email = self._required_text(body, "email").strip().lower()
+        password = self._required_text(body, "password")
+        with self._connect() as db:
+            person = db.execute("SELECT id,password_hash,password_salt,verified_at FROM api_people WHERE email=?", (email,)).fetchone()
+            candidate = hashlib.scrypt(password.encode(), salt=person["password_salt"], n=2**14, r=8, p=1) if person else b""
+            if person is None or not hmac.compare_digest(candidate, person["password_hash"]):
+                raise APIError(401, "Email or password is incorrect")
+            if person["verified_at"] is not None:
+                raise APIError(409, "This email is already verified. Sign in instead")
+            person_id = person["id"]
+            token = secrets.token_urlsafe(32)
+            db.execute("INSERT INTO api_verification_tokens(token_hash,person_id,expires_at) VALUES(?,?,?)", (self._token_hash(token), person_id, (self.clock() + timedelta(hours=24)).isoformat()))
+        try:
+            if self.mailer is None:
+                raise RuntimeError("Email verification is not configured")
+            self.mailer.send_verification(email, token)
+        except Exception:
+            with self._connect() as db:
+                db.execute("DELETE FROM api_verification_tokens WHERE token_hash=?", (self._token_hash(token),))
+            raise APIError(503, "Could not send verification email; check email service settings and try again")
+        with self._connect() as db:
+            db.execute("DELETE FROM api_verification_tokens WHERE person_id=? AND token_hash<>?", (person_id, self._token_hash(token)))
+        return {"message": "A fresh verification token was sent. It expires in 24 hours"}
+
     def _login(self, body):
         email = self._required_text(body, "email").strip().lower()
         password = self._required_text(body, "password")
@@ -337,7 +374,16 @@ class AlertMeshAPI:
         header = environ.get("HTTP_AUTHORIZATION", "")
         scheme, _, raw_token = header.partition(" ")
         if scheme.lower() != "bearer" or not raw_token:
-            raise APIError(401, "A bearer access token is required")
+            cookies = {}
+            for item in environ.get("HTTP_COOKIE", "").split(";"):
+                name, separator, value = item.strip().partition("=")
+                if separator:
+                    cookies[name] = value
+            raw_token = cookies.get("alertmesh_session", "")
+            scheme = "cookie"
+        if scheme.lower() not in {"bearer", "cookie"} or not raw_token:
+            if not raw_token:
+                raise APIError(401, "Sign in to view this account")
         token_hash = self._token_hash(raw_token)
         with self._connect() as db:
             row = db.execute("SELECT person_id,expires_at FROM api_sessions WHERE token_hash=?", (token_hash,)).fetchone()

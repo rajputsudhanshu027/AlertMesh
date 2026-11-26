@@ -142,6 +142,36 @@
     .error-state p { margin: 0 0 12px; font-size: 13px; line-height: 1.5; }
     .error-state button { border: 1px solid #c78475; border-radius: 7px; padding: 7px 10px; background: #fff; color: #713c33; cursor: pointer; }
     .footer-note { margin: 22px 0 0; color: var(--quiet); font-size: 10px; text-align: right; }
+    .auth-panel, .account-panel { margin: 34px auto 0; max-width: 980px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); box-shadow: var(--shadow); }
+    .auth-panel { display: grid; grid-template-columns: 1fr 1fr; gap: 48px; padding: clamp(24px, 5vw, 54px); }
+    .auth-panel[hidden], .account-panel[hidden] { display: none; }
+    .auth-copy h2, .account-heading h2 { margin: 8px 0 12px; color: var(--deep); font-family: Georgia, "Times New Roman", serif; font-size: clamp(28px, 4vw, 42px); font-weight: 500; letter-spacing: -.035em; }
+    .auth-copy > p:not(.eyebrow), .account-heading p { max-width: 390px; color: var(--muted); font-size: 13px; line-height: 1.65; }
+    .eyebrow { margin: 0; color: #5c8275; font-size: 10px; font-weight: 750; letter-spacing: .12em; text-transform: uppercase; }
+    .demo-note { color: var(--quiet); font-size: 11px; line-height: 1.55; }
+    .auth-card { align-self: center; }
+    .auth-tabs { display: flex; gap: 5px; margin-bottom: 22px; padding-bottom: 10px; border-bottom: 1px solid var(--line); }
+    .auth-tabs button { border: 0; border-radius: 7px; padding: 8px 9px; background: transparent; color: var(--muted); font: inherit; font-size: 11px; cursor: pointer; }
+    .auth-tabs button[aria-pressed="true"] { background: #e9f1ed; color: #315d54; font-weight: 700; }
+    #auth-form { display: grid; gap: 9px; }
+    #auth-form label { margin-top: 6px; color: var(--ink); font-size: 11px; font-weight: 650; }
+    #auth-form input { min-height: 42px; width: 100%; box-sizing: border-box; border: 1px solid #cbd7d0; border-radius: 7px; padding: 9px 11px; background: #fff; color: var(--ink); font: inherit; font-size: 13px; }
+    #auth-form input:focus-visible, .auth-tabs button:focus-visible, .reset-button:focus-visible { outline: 3px solid #8ab7a6; outline-offset: 2px; }
+    .field-help { margin: -3px 0 4px; color: var(--quiet); font-size: 10px; line-height: 1.5; }
+    .auth-submit { margin-top: 9px; min-height: 42px; border: 0; border-radius: 7px; background: #244f4b; color: white; font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; }
+    .text-button { border: 0; padding: 5px 0; background: transparent; color: #496d63; font: inherit; font-size: 11px; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+    #auth-message { min-height: 20px; margin: 14px 0 0; color: #7a4c24; font-size: 11px; line-height: 1.5; }
+    .account-panel { padding: clamp(22px, 4vw, 38px); }
+    .account-heading { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding-bottom: 21px; border-bottom: 1px solid var(--line); }
+    .account-heading h2 { font-size: 32px; }
+    .account-heading p { margin: 0; }
+    .account-stat { padding: 9px 12px; border-radius: 7px; background: #e9f1ed; color: #315d54; font-size: 11px; font-weight: 650; white-space: nowrap; }
+    .account-columns { display: grid; grid-template-columns: 1fr 1fr; gap: 34px; padding-top: 22px; }
+    .account-columns h3 { margin: 0 0 12px; color: var(--muted); font-size: 11px; }
+    .account-columns ul { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+    .account-columns li { display: grid; gap: 5px; padding: 12px; border: 1px solid var(--line); border-radius: 8px; }
+    .account-columns li strong { color: var(--deep); font-size: 12px; }
+    .account-columns li span, .account-empty { color: var(--muted); font-size: 11px; line-height: 1.5; }
 
     @media (max-width: 1100px) {
       .workspace { grid-template-columns: minmax(170px, 205px) minmax(320px, 1fr); }
@@ -179,6 +209,11 @@
       .detail-section { border-bottom: 1px solid var(--line); }
       .alert-time { padding-right: 9px; font-size: 9px; }
       .footer-note { text-align: left; }
+      .auth-panel { grid-template-columns: 1fr; gap: 22px; padding: 23px; }
+      .auth-copy h2 { font-size: 32px; }
+      .auth-tabs { justify-content: space-between; }
+      .account-heading { align-items: flex-start; flex-direction: column; }
+      .account-columns { grid-template-columns: 1fr; gap: 24px; }
     }
     @media (max-width: 390px) {
       .topbar-right { gap: 8px; }
@@ -207,6 +242,8 @@
       <div class="topbar-right">
         <span class="demo-label">Local demo</span>
         <button class="reset-button" id="reset-demo" type="button">Reset demo</button>
+        <button class="reset-button" id="account-access" type="button">Account access</button>
+        <button class="reset-button" id="sign-out" type="button" hidden>Sign out</button>
       </div>
     </header>
     <main>
@@ -219,6 +256,14 @@
       </section>
 
       <div id="app-state" class="loading" role="status">Loading seeded demo data…</div>
+      <section id="auth-panel" class="auth-panel" aria-labelledby="auth-title" hidden>
+        <div class="auth-copy"><p class="eyebrow">Your AlertMesh account</p><h2 id="auth-title">Keep your places close.</h2><p>Register with your email, verify it with the token we send, then sign in to see your account.</p><p class="demo-note">This local browser preview uses the configured verification mailer. It never sends alert emails from this screen.</p></div>
+        <div class="auth-card">
+          <div class="auth-tabs" role="group" aria-label="Account action"><button type="button" data-auth-mode="login" aria-pressed="true">Sign in</button><button type="button" data-auth-mode="register" aria-pressed="false">Create account</button><button type="button" data-auth-mode="verify" aria-pressed="false">Verify email</button><button type="button" data-auth-mode="resend" aria-pressed="false">Resend token</button></div>
+          <form id="auth-form" novalidate></form><p id="auth-message" role="status" aria-live="polite"></p><button class="text-button" id="return-demo" type="button">Return to the local demo</button>
+        </div>
+      </section>
+      <section id="account-panel" class="account-panel" hidden aria-labelledby="account-title"></section>
       <div id="dashboard" hidden>
         <section class="source-strip" id="source-strip" aria-label="Source freshness"></section>
         <div class="workspace">
@@ -262,9 +307,13 @@
 
   <script>
     (() => {
-      const state = { data: null, filter: "all", selectedId: null, selectedPlace: null };
+      const state = { data: null, filter: "all", selectedId: null, selectedPlace: null, authMode: "login" };
       const appState = document.getElementById("app-state");
       const dashboard = document.getElementById("dashboard");
+      const authPanel = document.getElementById("auth-panel");
+      const accountPanel = document.getElementById("account-panel");
+      const authForm = document.getElementById("auth-form");
+      const authMessage = document.getElementById("auth-message");
       const sourceLabels = { nws: "National Weather Service", usgs: "USGS earthquakes" };
 
       const escapeHtml = (value) => String(value ?? "").replace(/[&<>"']/g, char => ({
@@ -289,7 +338,97 @@
       const statusLabel = status => ({ active: "Active", expired: "Expired", cancelled: "Canceled", unknown: "Status unknown" }[status] || status);
       const severityLabel = severity => severity === "unknown" ? "Severity unknown" : `${severity[0].toUpperCase()}${severity.slice(1)}`;
 
+      function showAuth(message = "") {
+        appState.hidden = true; dashboard.hidden = true; accountPanel.hidden = true; authPanel.hidden = false;
+        document.getElementById("reset-demo").hidden = true;
+        document.getElementById("account-access").hidden = true;
+        document.getElementById("sign-out").hidden = true;
+        authMessage.textContent = message;
+        renderAuthForm();
+      }
+
+      function renderAuthForm() {
+        document.querySelectorAll("[data-auth-mode]").forEach(button => button.setAttribute("aria-pressed", String(button.dataset.authMode === state.authMode)));
+        const fields = state.authMode === "verify"
+          ? `<label for="verify-token">Verification token</label><input id="verify-token" name="token" autocomplete="one-time-code" required><p class="field-help">Use the token from the verification email. Tokens expire after 24 hours.</p><button class="auth-submit" type="submit">Verify email</button>`
+          : `<label for="auth-email">Email address</label><input id="auth-email" name="email" type="email" autocomplete="email" required>${state.authMode === "register" ? `<label for="auth-password">Password</label><input id="auth-password" name="password" type="password" autocomplete="new-password" minlength="12" required><p class="field-help">Use 12 or more characters.</p><button class="auth-submit" type="submit">Create account</button>` : `<label for="auth-password">Password</label><input id="auth-password" name="password" type="password" autocomplete="current-password" required>${state.authMode === "resend" ? `<p class="field-help">Confirm your password to send a fresh verification token.</p><button class="auth-submit" type="submit">Send new token</button>` : `<button class="auth-submit" type="submit">Sign in</button>`}`}`;
+        authForm.innerHTML = fields;
+      }
+
+      async function authRequest(path, payload) {
+        const headers = { "Content-Type": "application/json", Accept: "application/json" };
+        if (path === "/api/login") headers["X-AlertMesh-Browser"] = "session-cookie";
+        const response = await fetch(path, { method: "POST", credentials: "same-origin", headers, body: JSON.stringify(payload) });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || "Request failed. Please try again.");
+        return result;
+      }
+
+      async function loadAccount() {
+        const response = await fetch("/api/me", { credentials: "same-origin", cache: "no-store" });
+        if (response.status === 401) { loadDemo(); return; }
+        if (!response.ok) throw new Error("Your account could not be loaded. Please try again.");
+        const person = await response.json();
+        const [placesResponse, inboxResponse] = await Promise.all([
+          fetch("/api/places", { credentials: "same-origin", cache: "no-store" }),
+          fetch("/api/inbox", { credentials: "same-origin", cache: "no-store" })
+        ]);
+        if (!placesResponse.ok || !inboxResponse.ok) throw new Error("Your account data could not be loaded. Please sign in again.");
+        const places = (await placesResponse.json()).places;
+        const inbox = (await inboxResponse.json()).alerts;
+        authPanel.hidden = true; dashboard.hidden = true; accountPanel.hidden = false;
+        document.getElementById("reset-demo").hidden = true;
+        document.getElementById("account-access").hidden = true;
+        document.getElementById("sign-out").hidden = false;
+        accountPanel.innerHTML = `<div class="account-heading"><div><p class="eyebrow">Signed in</p><h2 id="account-title">Welcome to AlertMesh</h2><p>${escapeHtml(person.email)}</p></div><span class="account-stat">${places.length} ${places.length === 1 ? "Place" : "Places"} · ${inbox.length} Inbox ${inbox.length === 1 ? "entry" : "entries"}</span></div><div class="account-columns"><section><h3>Your Places</h3>${places.length ? `<ul>${places.map(place => `<li><strong>${escapeHtml(place.name)}</strong><span>${Number(place.latitude).toFixed(3)}, ${Number(place.longitude).toFixed(3)} · ${escapeHtml(String(place.radius_km))} km radius</span></li>`).join("")}</ul>` : `<p class="account-empty">No Places yet. Your account is ready for monitoring setup.</p>`}</section><section><h3>Your Inbox</h3>${inbox.length ? `<ul>${inbox.map(alert => `<li><strong>${escapeHtml(alert.title)}</strong><span>${escapeHtml(alert.status)} · ${escapeHtml(alert.places.map(place => place.name).join(", ") || "No matching Places")}</span></li>`).join("")}</ul>` : `<p class="account-empty">No matching Alerts yet.</p>`}</section></div><p class="demo-note">Your session is stored in a protected browser cookie. Sign out to close this account view.</p>`;
+      }
+
+      document.querySelectorAll("[data-auth-mode]").forEach(button => button.addEventListener("click", () => { state.authMode = button.dataset.authMode; authMessage.textContent = ""; renderAuthForm(); }));
+      authForm.addEventListener("submit", async event => {
+        event.preventDefault(); authMessage.textContent = "";
+        const values = Object.fromEntries(new FormData(authForm));
+        try {
+          if (state.authMode === "register") {
+            const result = await authRequest("/api/register", values);
+            state.authMode = "verify"; renderAuthForm();
+            authMessage.textContent = `${result.message}. Then enter the token here to verify your email.`;
+          } else if (state.authMode === "resend") {
+            const result = await authRequest("/api/resend-verification", values);
+            state.authMode = "verify"; renderAuthForm();
+            authMessage.textContent = `${result.message}. Enter the new token here.`;
+          } else if (state.authMode === "verify") {
+            await authRequest("/api/verify", values);
+            state.authMode = "login"; renderAuthForm();
+            authMessage.textContent = "Email verified. Sign in with your email and password.";
+          } else {
+            await authRequest("/api/login", values);
+            await loadAccount();
+          }
+        } catch (error) {
+          authMessage.textContent = error.message;
+          if (state.authMode === "login" && /incorrect/i.test(error.message)) authMessage.textContent += " Check your email and password, then try again.";
+          if (state.authMode === "login" && /Verify your email/i.test(error.message)) authMessage.textContent += " Use Verify email or Resend token above to finish verification.";
+          if (state.authMode === "verify" && /invalid or expired/i.test(error.message)) authMessage.textContent += " Choose Resend token and confirm your email and password to get a fresh one.";
+          if (state.authMode === "register" && /already exists/i.test(error.message)) authMessage.textContent += " If this account is unverified, choose Resend token.";
+          if (["register", "resend"].includes(state.authMode) && /Could not send verification email/i.test(error.message)) authMessage.textContent += " Check your email service configuration, then try again.";
+        }
+      });
+      document.getElementById("sign-out").addEventListener("click", async () => {
+        try {
+          await authRequest("/api/logout", {});
+          await loadDemo();
+        } catch (error) {
+          authMessage.textContent = `Sign-out could not be completed: ${error.message}`;
+        }
+      });
+      document.getElementById("account-access").addEventListener("click", () => showAuth());
+      document.getElementById("return-demo").addEventListener("click", loadDemo);
+
       async function loadDemo() {
+        authPanel.hidden = true; accountPanel.hidden = true;
+        document.getElementById("reset-demo").hidden = false;
+        document.getElementById("account-access").hidden = false;
+        document.getElementById("sign-out").hidden = true;
         appState.hidden = false;
         appState.className = "loading";
         appState.textContent = "Loading seeded demo data…";
@@ -451,7 +590,7 @@
         renderSnapshotTime();
       }
 
-      document.getElementById("reset-demo").addEventListener("click", loadDemo);
+      document.getElementById("reset-demo")?.addEventListener("click", loadDemo);
       document.querySelectorAll(".filter-button").forEach(button => button.addEventListener("click", () => {
         state.filter = button.dataset.filter;
         renderFilters();
@@ -476,7 +615,7 @@
         state.selectedId = button.dataset.alert;
         renderFeed(); renderDetail();
       });
-      loadDemo();
+      loadAccount().catch(error => showAuth(error.message));
     })();
   </script>
 </body>
