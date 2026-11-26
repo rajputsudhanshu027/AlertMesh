@@ -88,6 +88,7 @@ def run_demo() -> dict[str, int]:
                             latitude=38.0, longitude=-77.0)
         mail.fail_next = True
         app.ingest(retry_alert, checked_at=NOW + timedelta(minutes=3))
+        messages_before_retry = len(mail.messages)
         app.retry_failed_deliveries()
         app.mark_source_stale("nws")
         stale = app.source_status("nws")["stale"]
@@ -96,7 +97,9 @@ def run_demo() -> dict[str, int]:
         replay_inbox_before_delete = app.inbox_for("demo-person")
         terminal_retained = any(e.alert_id == "usgs:demo-expired" for e in replay_inbox_before_delete)
         cancellation_retained = any(e.alert_id == "usgs:demo-cancelled" for e in replay_inbox_before_delete)
-        retry_sent = app.delivery_status.get(("demo-person", "usgs:demo-retry")) == "sent"
+        retry_sent = len(mail.messages) == messages_before_retry + 1 and any(
+            subject == "Alert update: Retry demo earthquake" for _, subject, _ in mail.messages[messages_before_retry:]
+        )
         quake_entry = next(e for e in replay_inbox_before_delete if e.alert_id == "usgs:demo-quake")
 
         # Demonstrate deletion effects through public inbox reads.
