@@ -1,0 +1,95 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-26T20:11:23Z",
+  "title": "Design System: AlertMesh",
+  "extensions": {
+    "typographyMeta": {
+      "display": {
+        "displayName": "Field Folio Serif",
+        "purpose": "Page titles and selected Alert headings establish an editorial reading order."
+      },
+      "body": {
+        "displayName": "Interface Sans",
+        "purpose": "Keep controls, source status, and dense Alert details direct and familiar."
+      }
+    },
+    "shadows": [
+      {
+        "name": "account-surface",
+        "value": "0 12px 32px rgba(29,48,38,.05)",
+        "purpose": "Very low separation for account and Place-management surfaces."
+      },
+      {
+        "name": "selected-alert-record",
+        "value": "0 10px 28px rgba(29,48,38,.055)",
+        "purpose": "Lift the selected Alert detail from the folio without adding a colored glow."
+      }
+    ],
+    "motion": [
+      {
+        "name": "control-feedback",
+        "value": "background-color .16s ease, border-color .16s ease",
+        "purpose": "Quiet hover feedback on buttons and selectable rows."
+      },
+      {
+        "name": "reduced-motion",
+        "value": "transition-duration: .01ms",
+        "purpose": "Honor the operating system preference for reduced motion."
+      }
+    ],
+    "breakpoints": [
+      { "name": "tablet", "value": "1120px" },
+      { "name": "phone", "value": "760px" },
+      { "name": "compact-phone", "value": "430px" }
+    ],
+    "narrative": {
+      "northStar": "The Field Folio",
+      "overview": "AlertMesh reads like a dependable field reference. People move from Places to the Inbox and into a selected Alert record. Cool green-gray paper, evergreen ink, and ruled divisions keep information calm and practical across the demo and account surfaces.",
+      "keyCharacteristics": [
+        "Place-first orientation with a distinct Alert ledger and detail record.",
+        "Cool paper tones, evergreen ink, and limited hazard colors.",
+        "Serif display headings with clear sans-serif interface text.",
+        "Fine rules and restrained elevation separate records."
+      ],
+      "rules": [
+        {
+          "name": "The Status-in-Words Rule",
+          "body": "Pair colored source and hazard cues with labels or shape so status remains clear without color perception.",
+          "section": "colors"
+        },
+        {
+          "name": "The Legible Record Rule",
+          "body": "Keep functional labels and metadata at or above the documented label size; use spacing and weight for hierarchy.",
+          "section": "typography"
+        }
+      ],
+      "dos": [
+        "Keep Places, the Inbox, and the selected Alert record easy to scan in that order.",
+        "Keep source freshness and Alert guidance visible in the detail view.",
+        "Use hazard color sparingly and retain textual state labels."
+      ],
+      "donts": [
+        "Do not present stale source data as current.",
+        "Do not rely on small text, color alone, decorative grids, or glow effects to carry meaning."
+      ]
+    }
+  },
+  "components": [
+    {
+      "name": "Primary action",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Use for the main action in a form or account flow.",
+      "html": "<button class=\"action-button primary\" type=\"button\">Save Place</button>",
+      "css": ".action-button.primary { min-height: 39px; padding: 8px 13px; border: 1px solid #285447; border-radius: 5px; color: #f8faf7; background: #285447; font: 650 11px/1.45 ui-sans-serif, system-ui, sans-serif; transition: background-color .16s ease, border-color .16s ease; } .action-button.primary:hover { border-color: #183b32; background: #183b32; } .action-button.primary:focus-visible { outline: 3px solid #a96915; outline-offset: 3px; }"
+    },
+    {
+      "name": "Alert ledger row",
+      "kind": "card",
+      "refersTo": "alert-record",
+      "description": "A selectable Inbox entry that keeps type, state, title, matching Places, and time together.",
+      "html": "<button class=\"alert-card\" aria-pressed=\"false\"><span class=\"severity-bar\"></span><span class=\"alert-content\"><span class=\"tag\">Active</span><span class=\"alert-title\">Alert title</span><span class=\"alert-subline\">Severity · matching Place</span></span><span class=\"alert-time\">Just now</span></button>",
+      "css": ".alert-card { display: grid; grid-template-columns: 4px minmax(0,1fr) auto; gap: 13px; padding: 15px 10px 14px 0; border: 0; border-bottom: 1px solid #d1d6ca; color: #24342e; background: transparent; text-align: left; } .alert-card[aria-pressed=\"true\"] { background: #e4e9df; box-shadow: inset 0 0 0 1px #d7dfd3; } .alert-title { color: #183b32; font: 500 18px/1.25 Georgia, serif; }"
+    }
+  ]
+}
