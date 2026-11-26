@@ -3,6 +3,7 @@ import json
 import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
+from unittest.mock import patch
 
 from alertmesh import Alert, AlertMesh
 from alertmesh.api import AlertMeshAPI, VerificationMailer
@@ -97,6 +98,14 @@ class APITests(unittest.TestCase):
         self.assertEqual(status, 400)
         self.assertIn("valid email", error["error"])
         self.assertEqual(self.mailer.sent, [])
+
+    def test_account_delete_restores_credentials_when_shared_flow_delete_fails(self):
+        token = self.register_and_login()
+        with patch.object(self.app.flow, "delete_person", side_effect=RuntimeError("temporary storage failure")):
+            status, error = self.request("DELETE", "/api/me", token=token)
+        self.assertEqual(status, 503)
+        self.assertIn("Could not delete account", error["error"])
+        self.assertEqual(self.request("GET", "/api/me", token=token)[0], 200)
 
     def test_invalid_place_and_account_deletion(self):
         token = self.register_and_login()

@@ -189,9 +189,21 @@ class AlertMeshAPI:
         if path == "/api/me" and method == "GET":
             return self._person(person_id), 200
         if path == "/api/me" and method == "DELETE":
-            self.flow.delete_person(person_id)
             with self._connect() as db:
+                person = db.execute("SELECT * FROM api_people WHERE id=?", (person_id,)).fetchone()
+                if person is None:
+                    raise APIError(404, "Account not found")
+                verification_tokens = db.execute("SELECT * FROM api_verification_tokens WHERE person_id=?", (person_id,)).fetchall()
+                sessions = db.execute("SELECT * FROM api_sessions WHERE person_id=?", (person_id,)).fetchall()
                 db.execute("DELETE FROM api_people WHERE id=?", (person_id,))
+            try:
+                self.flow.delete_person(person_id)
+            except Exception:
+                with self._connect() as db:
+                    db.execute("INSERT INTO api_people VALUES(?,?,?,?,?,?)", tuple(person))
+                    db.executemany("INSERT INTO api_verification_tokens VALUES(?,?,?)", (tuple(row) for row in verification_tokens))
+                    db.executemany("INSERT INTO api_sessions VALUES(?,?,?)", (tuple(row) for row in sessions))
+                raise APIError(503, "Could not delete account; please try again")
             return {"deleted": True}, 200
         if path == "/api/places" and method == "GET":
             return {"places": self._places(person_id)}, 200
