@@ -103,45 +103,84 @@ class AlertMesh:
         self.last_checked = {source: checked for source, (checked, _) in source_status.items() if checked is not None}
         self.source_stale = {source: stale for source, (_, stale) in source_status.items()}
 
+    def refresh(self) -> None:
+        """Reload the latest committed application state from SQLite."""
+        with self._store.transaction():
+            self._reload()
+
     def add_person(self, person: Person) -> None:
-        self.people[person.id] = person
-        self._persist()
+        with self._store.transaction():
+            self._reload()
+            self.people[person.id] = person
+            self._persist()
 
     def verify_person(self, person_id: str) -> None:
-        self.people[person_id].verified = True
-        self._persist()
+        with self._store.transaction():
+            self._reload()
+            self.people[person_id].verified = True
+            self._persist()
 
     def add_place(self, place: Place, active_alerts: list[Alert] | None = None) -> None:
-        if place.person_id not in self.people:
-            raise KeyError("Person does not exist")
-        self.places[place.id] = place
-        self._persist()
-        # Catch-up creates inbox entries without backdated email.
-        for alert in active_alerts or []:
-            self.ingest(alert, checked_at=place.added_at, notify=False)
-        self._persist()
+        with self._store.transaction():
+            self._reload()
+            if place.person_id not in self.people:
+                raise KeyError("Person does not exist")
+            self.places[place.id] = place
+            # Catch-up creates inbox entries without backdated email.
+            catch_up = active_alerts if active_alerts is not None else [a for a in self.alerts.values() if a.status in {"active", "unknown"}]
+            for alert in catch_up:
+                self._ingest_current(alert, checked_at=place.added_at, notify=False)
+            self._persist()
 
     def rename_place(self, place_id: str, name: str) -> None:
-        self.places[place_id].name = name
-        self._persist()
+        with self._store.transaction():
+            self._reload()
+            self.places[place_id].name = name
+            self._persist()
+
+    def update_place(self, place: Place) -> None:
+        """Replace a saved Place while preserving its owning Person."""
+        with self._store.transaction():
+            self._reload()
+            existing = self.places.get(place.id)
+            if existing is None or existing.person_id != place.person_id:
+                raise KeyError("Place does not exist")
+            self.places[place.id] = place
+            for alert in self.alerts.values():
+                key = (place.person_id, alert.id)
+                matches = [p for p in self.places.values() if p.person_id == place.person_id and self._matches(alert, p)]
+                entry = self.inbox.get(key)
+                if matches:
+                    if entry is None:
+                        entry = InboxEntry(place.person_id, alert.id)
+                        self.inbox[key] = entry
+                    entry.place_ids = {p.id for p in matches}
+                    entry.updated_at = utcnow()
+                elif entry:
+                    entry.place_ids.discard(place.id)
+            self._persist()
 
     def delete_place(self, place_id: str) -> None:
-        self.places.pop(place_id, None)
-        for entry in self.inbox.values():
-            entry.place_ids.discard(place_id)
-        self._persist()
-
-    def delete_person(self, person_id: str) -> None:
-        self.people.pop(person_id, None)
-        for place_id in [p.id for p in self.places.values() if p.person_id == person_id]:
+        with self._store.transaction():
+            self._reload()
             self.places.pop(place_id, None)
             for entry in self.inbox.values():
                 entry.place_ids.discard(place_id)
-        for key in [key for key in self.inbox if key[0] == person_id]:
-            self.inbox.pop(key, None)
-            self.delivery_status.pop(key, None)
-            self._emailed_revision.pop(key, None)
-        self._persist()
+            self._persist()
+
+    def delete_person(self, person_id: str) -> None:
+        with self._store.transaction():
+            self._reload()
+            self.people.pop(person_id, None)
+            for place_id in [p.id for p in self.places.values() if p.person_id == person_id]:
+                self.places.pop(place_id, None)
+                for entry in self.inbox.values():
+                    entry.place_ids.discard(place_id)
+            for key in [key for key in self.inbox if key[0] == person_id]:
+                self.inbox.pop(key, None)
+                self.delivery_status.pop(key, None)
+                self._emailed_revision.pop(key, None)
+            self._persist()
 
     def ingest(self, alert: Alert, *, checked_at: datetime | None = None, notify: bool = True) -> None:
         with self._store.transaction():
@@ -188,13 +227,17 @@ class AlertMesh:
             self._persist()
 
     def mark_source_stale(self, source: str) -> None:
-        self.source_stale[source] = True
-        self._persist()
+        with self._store.transaction():
+            self._reload()
+            self.source_stale[source] = True
+            self._persist()
 
     def source_status(self, source: str) -> dict:
+        self.refresh()
         return {"source": source, "stale": self.source_stale.get(source, True), "last_checked": self.last_checked.get(source)}
 
     def inbox_for(self, person_id: str, *, now: datetime | None = None) -> list[InboxEntry]:
+        self.refresh()
         self.prune_expired(now=now)
         return sorted((e for e in self.inbox.values() if e.person_id == person_id), key=lambda e: e.updated_at, reverse=True)
 

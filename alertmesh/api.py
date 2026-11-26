@@ -23,7 +23,14 @@ from http import HTTPStatus
 from typing import Callable
 from wsgiref.simple_server import make_server
 
-from .service import SEVERITY
+from .service import AlertMesh, Person, Place, SEVERITY
+
+
+class _DiscardEmail:
+    """Avoid accidental delivery from account-management requests."""
+
+    def send(self, to: str, subject: str, body: str) -> None:
+        return None
 
 
 def _now() -> datetime:
@@ -59,11 +66,16 @@ class SMTPVerificationMailer(VerificationMailer):
 class AlertMeshAPI:
     """WSGI API with durable account, place, session, and inbox storage."""
 
-    def __init__(self, database: str = "alertmesh.sqlite3", mailer: VerificationMailer | None = None, *, clock: Callable[[], datetime] = _now) -> None:
-        self.database = database
+    def __init__(self, database: str | None = None, mailer: VerificationMailer | None = None, *, clock: Callable[[], datetime] = _now) -> None:
+        self.database = database or os.environ.get("ALERTMESH_DB_PATH", "alertmesh.sqlite3")
         self.mailer = mailer
         self.clock = clock
+        self.flow = AlertMesh(_DiscardEmail(), db_path=database)
         self._initialize()
+        self._sync_domain()
+
+    def close(self) -> None:
+        self.flow.close()
 
     def __call__(self, environ, start_response):
         method = environ.get("REQUEST_METHOD", "GET").upper()
@@ -108,39 +120,36 @@ class AlertMeshAPI:
                     token_hash BLOB PRIMARY KEY, person_id TEXT NOT NULL REFERENCES api_people(id) ON DELETE CASCADE,
                     expires_at TEXT NOT NULL
                 );
-                CREATE TABLE IF NOT EXISTS api_places (
-                    id TEXT PRIMARY KEY, person_id TEXT NOT NULL REFERENCES api_people(id) ON DELETE CASCADE,
-                    name TEXT NOT NULL, latitude REAL NOT NULL, longitude REAL NOT NULL,
-                    radius_km REAL NOT NULL DEFAULT 25, weather_enabled INTEGER NOT NULL DEFAULT 1,
-                    earthquake_enabled INTEGER NOT NULL DEFAULT 1, minimum_severity TEXT NOT NULL DEFAULT 'moderate',
-                    created_at TEXT NOT NULL
-                );
-                CREATE TABLE IF NOT EXISTS api_alerts (
-                    id TEXT PRIMARY KEY, source TEXT NOT NULL, hazard TEXT NOT NULL, title TEXT NOT NULL,
-                    status TEXT NOT NULL DEFAULT 'active', severity TEXT NOT NULL DEFAULT 'unknown',
-                    published_at TEXT NOT NULL, expected_end TEXT, instructions TEXT NOT NULL DEFAULT '',
-                    geometry TEXT, latitude REAL, longitude REAL, ended_at TEXT
-                );
-                CREATE TABLE IF NOT EXISTS api_inbox_entries (
-                    person_id TEXT NOT NULL REFERENCES api_people(id) ON DELETE CASCADE,
-                    alert_id TEXT NOT NULL REFERENCES api_alerts(id) ON DELETE CASCADE,
-                    created_at TEXT NOT NULL, PRIMARY KEY (person_id, alert_id)
-                );
-                CREATE TABLE IF NOT EXISTS api_inbox_places (
-                    person_id TEXT NOT NULL, alert_id TEXT NOT NULL, place_id TEXT NOT NULL,
-                    PRIMARY KEY (person_id, alert_id, place_id),
-                    FOREIGN KEY (person_id, alert_id) REFERENCES api_inbox_entries(person_id, alert_id) ON DELETE CASCADE,
-                    FOREIGN KEY (place_id) REFERENCES api_places(id) ON DELETE CASCADE
-                );
-                CREATE TABLE IF NOT EXISTS api_email_deliveries (
-                    person_id TEXT NOT NULL REFERENCES api_people(id) ON DELETE CASCADE,
-                    alert_id TEXT NOT NULL REFERENCES api_alerts(id) ON DELETE CASCADE,
-                    status TEXT NOT NULL, attempted_at TEXT, PRIMARY KEY (person_id, alert_id)
-                );
-                CREATE TABLE IF NOT EXISTS api_source_status (
-                    source TEXT PRIMARY KEY, last_checked TEXT, stale INTEGER NOT NULL DEFAULT 1
-                );
+                CREATE TABLE IF NOT EXISTS api_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
             """)
+
+    def _sync_domain(self):
+        """Import account rows created by the earlier standalone API schema."""
+        with self._connect() as db:
+            people = db.execute("SELECT id,email,verified_at,created_at FROM api_people").fetchall()
+            synced = db.execute("SELECT 1 FROM api_meta WHERE key='legacy_domain_sync_v1'").fetchone()
+            legacy_places = not synced and db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='api_places'").fetchone()
+            places = db.execute("SELECT * FROM api_places").fetchall() if legacy_places else []
+        self.flow.refresh()
+        for row in people:
+            current = self.flow.people.get(row["id"])
+            person = Person(row["id"], row["email"], row["verified_at"] is not None)
+            if current != person:
+                self.flow.add_person(person)
+        self.flow.refresh()
+        for row in places:
+            if row["id"] not in self.flow.places:
+                self.flow.add_place(Place(
+                    id=row["id"], person_id=row["person_id"], name=row["name"],
+                    latitude=row["latitude"], longitude=row["longitude"],
+                    radius_km=row["radius_km"], weather_enabled=bool(row["weather_enabled"]),
+                    earthquake_enabled=bool(row["earthquake_enabled"]),
+                    minimum_severity=row["minimum_severity"],
+                    added_at=datetime.fromisoformat(row["created_at"]),
+                ))
+        if not synced:
+            with self._connect() as db:
+                db.execute("INSERT OR IGNORE INTO api_meta(key,value) VALUES('legacy_domain_sync_v1','done')")
 
     @staticmethod
     def _read_json(environ) -> dict:
@@ -179,6 +188,7 @@ class AlertMeshAPI:
         if path == "/api/me" and method == "GET":
             return self._person(person_id), 200
         if path == "/api/me" and method == "DELETE":
+            self.flow.delete_person(person_id)
             with self._connect() as db:
                 db.execute("DELETE FROM api_people WHERE id=?", (person_id,))
             return {"deleted": True}, 200
@@ -193,10 +203,11 @@ class AlertMeshAPI:
             if method == "PATCH":
                 return self._update_place(person_id, place_id, body), 200
             if method == "DELETE":
-                with self._connect() as db:
-                    cursor = db.execute("DELETE FROM api_places WHERE id=? AND person_id=?", (place_id, person_id))
-                    if cursor.rowcount == 0:
-                        raise APIError(404, "Place not found")
+                self.flow.refresh()
+                place = self.flow.places.get(place_id)
+                if place is None or place.person_id != person_id:
+                    raise APIError(404, "Place not found")
+                self.flow.delete_place(place_id)
                 return {"deleted": True}, 200
         if path == "/api/inbox" and method == "GET":
             return self._inbox(person_id), 200
@@ -222,11 +233,13 @@ class AlertMeshAPI:
                 db.execute("INSERT INTO api_verification_tokens(token_hash,person_id,expires_at) VALUES(?,?,?)", (self._token_hash(raw_token), person_id, (now + timedelta(hours=24)).isoformat()))
             except sqlite3.IntegrityError:
                 raise APIError(409, "An account with this email already exists")
+        self.flow.add_person(Person(person_id, email))
         try:
             self.mailer.send_verification(email, raw_token)
         except Exception:
             with self._connect() as db:
                 db.execute("DELETE FROM api_people WHERE id=?", (person_id,))
+            self.flow.delete_person(person_id)
             raise APIError(503, "Could not send verification email; please try again")
         return {"id": person_id, "email": email, "verified": False, "message": "Check your email for a verification token"}
 
@@ -241,6 +254,8 @@ class AlertMeshAPI:
             if datetime.fromisoformat(row["expires_at"]) <= now:
                 raise APIError(400, "Verification token is invalid or expired")
             db.execute("UPDATE api_people SET verified_at=? WHERE id=?", (now.isoformat(), row["person_id"]))
+            person_id = row["person_id"]
+        self.flow.verify_person(person_id)
         return {"verified": True}
 
     def _login(self, body):
@@ -273,55 +288,78 @@ class AlertMeshAPI:
             return row["person_id"], token_hash
 
     def _person(self, person_id):
+        self.flow.refresh()
+        person = self.flow.people.get(person_id)
+        if person is None:
+            raise APIError(404, "Account not found")
         with self._connect() as db:
-            row = db.execute("SELECT id,email,verified_at,created_at FROM api_people WHERE id=?", (person_id,)).fetchone()
+            row = db.execute("SELECT created_at FROM api_people WHERE id=?", (person_id,)).fetchone()
         if row is None:
             raise APIError(404, "Account not found")
-        return {"id": row["id"], "email": row["email"], "verified": row["verified_at"] is not None, "created_at": row["created_at"]}
+        return {"id": person.id, "email": person.email, "verified": person.verified, "created_at": row["created_at"]}
 
     def _places(self, person_id):
-        with self._connect() as db:
-            rows = db.execute("SELECT * FROM api_places WHERE person_id=? ORDER BY created_at", (person_id,)).fetchall()
-        return [self._place_json(row) for row in rows]
+        self.flow.refresh()
+        places = sorted((place for place in self.flow.places.values() if place.person_id == person_id), key=lambda place: place.added_at)
+        return [self._place_json(place) for place in places]
 
     def _create_place(self, person_id, body):
         data = self._validated_place(body, creating=True)
         place_id = str(uuid.uuid4())
-        with self._connect() as db:
-            db.execute("INSERT INTO api_places(id,person_id,name,latitude,longitude,radius_km,weather_enabled,earthquake_enabled,minimum_severity,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)", (place_id, person_id, data["name"], data["latitude"], data["longitude"], data["radius_km"], int(data["weather_enabled"]), int(data["earthquake_enabled"]), data["minimum_severity"], self.clock().isoformat()))
-            row = db.execute("SELECT * FROM api_places WHERE id=?", (place_id,)).fetchone()
-        return self._place_json(row)
+        place = Place(id=place_id, person_id=person_id, added_at=self.clock(), **data)
+        try:
+            self.flow.add_place(place)
+        except KeyError:
+            raise APIError(404, "Account not found")
+        return self._place_json(place)
 
     def _update_place(self, person_id, place_id, body):
-        with self._connect() as db:
-            row = db.execute("SELECT * FROM api_places WHERE id=? AND person_id=?", (place_id, person_id)).fetchone()
-            if row is None:
-                raise APIError(404, "Place not found")
-            current = self._place_json(row)
-            current.update(body)
-            data = self._validated_place(current, creating=False)
-            db.execute("UPDATE api_places SET name=?,latitude=?,longitude=?,radius_km=?,weather_enabled=?,earthquake_enabled=?,minimum_severity=? WHERE id=? AND person_id=?", (data["name"], data["latitude"], data["longitude"], data["radius_km"], int(data["weather_enabled"]), int(data["earthquake_enabled"]), data["minimum_severity"], place_id, person_id))
-            updated = db.execute("SELECT * FROM api_places WHERE id=?", (place_id,)).fetchone()
+        self.flow.refresh()
+        existing = self.flow.places.get(place_id)
+        if existing is None or existing.person_id != person_id:
+            raise APIError(404, "Place not found")
+        current = self._place_json(existing)
+        current.update(body)
+        data = self._validated_place(current, creating=False)
+        updated = Place(id=place_id, person_id=person_id, added_at=existing.added_at, **data)
+        try:
+            self.flow.update_place(updated)
+        except KeyError:
+            raise APIError(404, "Place not found")
         return self._place_json(updated)
 
     def _inbox(self, person_id):
-        cutoff = (self.clock() - timedelta(days=90)).isoformat()
-        with self._connect() as db:
-            rows = db.execute("""
-                SELECT a.*, i.created_at AS inbox_created,
-                       COALESCE(d.status, 'not_sent') AS delivery_status,
-                       d.attempted_at
-                FROM api_inbox_entries i JOIN api_alerts a ON a.id=i.alert_id
-                LEFT JOIN api_email_deliveries d ON d.person_id=i.person_id AND d.alert_id=i.alert_id
-                WHERE i.person_id=? AND (a.ended_at IS NULL OR a.ended_at>=?)
-                ORDER BY i.created_at DESC
-            """, (person_id, cutoff)).fetchall()
-            status = db.execute("SELECT source,last_checked,stale FROM api_source_status ORDER BY source").fetchall()
-            alerts = []
-            for row in rows:
-                places = db.execute("SELECT p.id,p.name FROM api_inbox_places ip JOIN api_places p ON p.id=ip.place_id WHERE ip.person_id=? AND ip.alert_id=? ORDER BY p.name", (person_id, row["id"])).fetchall()
-                alerts.append({"id": row["id"], "source": row["source"], "hazard": row["hazard"], "title": row["title"], "status": row["status"], "severity": row["severity"], "published_at": row["published_at"], "expected_end": row["expected_end"], "instructions": row["instructions"], "geometry": json.loads(row["geometry"]) if row["geometry"] else None, "latitude": row["latitude"], "longitude": row["longitude"], "inbox_created_at": row["inbox_created"], "places": [{"id": p["id"], "name": p["name"]} for p in places], "delivery": {"status": row["delivery_status"], "attempted_at": row["attempted_at"]}})
-        return {"alerts": alerts, "sources": [{"source": r["source"], "last_checked": r["last_checked"], "stale": bool(r["stale"])} for r in status]}
+        entries = self.flow.inbox_for(person_id, now=self.clock())
+        alerts = []
+        for entry in entries:
+            alert = self.flow.alerts.get(entry.alert_id)
+            if alert is None:
+                continue
+            places = [{"id": pid, "name": self.flow.places[pid].name} for pid in sorted(entry.place_ids) if pid in self.flow.places]
+            alerts.append({
+                "id": alert.id,
+                "source": alert.source,
+                "hazard": alert.hazard,
+                "title": alert.title,
+                "status": alert.status,
+                "severity": alert.severity,
+                "published_at": alert.published_at.isoformat(),
+                "expected_end": alert.expected_end.isoformat() if alert.expected_end else None,
+                "instructions": alert.instructions,
+                "geometry": alert.geometry,
+                "latitude": alert.latitude,
+                "longitude": alert.longitude,
+                "inbox_created_at": entry.updated_at.isoformat(),
+                "places": places,
+                "delivery": {"status": self.flow.delivery_status.get((person_id, alert.id), "not_sent")},
+            })
+        sources = sorted(set(self.flow.last_checked) | set(self.flow.source_stale))
+        source_status = [{
+            "source": source,
+            "last_checked": self.flow.last_checked[source].isoformat() if source in self.flow.last_checked else None,
+            "stale": self.flow.source_stale.get(source, True),
+        } for source in sources]
+        return {"alerts": alerts, "sources": source_status}
 
     @staticmethod
     def _validated_place(body, *, creating):
@@ -359,8 +397,8 @@ class AlertMeshAPI:
         return data
 
     @staticmethod
-    def _place_json(row):
-        return {"id": row["id"], "name": row["name"], "latitude": row["latitude"], "longitude": row["longitude"], "radius_km": row["radius_km"], "weather_enabled": bool(row["weather_enabled"]), "earthquake_enabled": bool(row["earthquake_enabled"]), "minimum_severity": row["minimum_severity"], "created_at": row["created_at"]}
+    def _place_json(place):
+        return {"id": place.id, "name": place.name, "latitude": place.latitude, "longitude": place.longitude, "radius_km": place.radius_km, "weather_enabled": place.weather_enabled, "earthquake_enabled": place.earthquake_enabled, "minimum_severity": place.minimum_severity, "created_at": place.added_at.isoformat()}
 
     @staticmethod
     def _required_text(body, name):
@@ -382,7 +420,7 @@ class APIError(Exception):
 
 
 def _from_environment():
-    database = os.environ.get("ALERTMESH_DATABASE", "alertmesh.sqlite3")
+    database = os.environ.get("ALERTMESH_DB_PATH", "alertmesh.sqlite3")
     host = os.environ.get("ALERTMESH_SMTP_HOST")
     mailer = None
     if host:
