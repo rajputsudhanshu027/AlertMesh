@@ -14,7 +14,7 @@ Register with `POST /api/register` using `{"email":"person@example.com","passwor
 
 If a token expires, `POST /api/resend-verification` accepts the account email and password and sends a fresh token.
 
-The browser at `/` provides registration, verification, sign-in, and sign-out forms. Browser sign-in also sets an HttpOnly, SameSite=Lax session cookie; HTTPS responses add the Secure cookie flag. The page uses the cookie for the signed-in account view and clears it on sign-out. API clients can continue using bearer access tokens.
+The browser at `/` provides registration, verification, sign-in, and sign-out forms, plus signed-in Place search and preference management. Browser sign-in also sets an HttpOnly, SameSite=Lax session cookie; HTTPS responses add the Secure cookie flag. The page uses the cookie for account, Place, and Inbox requests and clears it on sign-out. API clients can continue using bearer access tokens.
 
 - `GET /api/me` and `DELETE /api/me`
 - `GET /api/places`, `POST /api/places`, `PATCH /api/places/{id}`, and `DELETE /api/places/{id}`

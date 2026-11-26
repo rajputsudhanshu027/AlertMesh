@@ -125,6 +125,18 @@ class APITests(unittest.TestCase):
         self.assertIn('data-auth-mode="resend"', page)
         self.assertIn('id="return-demo"', page)
         self.assertIn('loadDemo();', page)
+        self.assertIn('id="place-search-form"', page)
+        self.assertIn('data-edit-place=', page)
+        self.assertIn('data-delete-place=', page)
+        self.assertIn('name="weather_enabled"', page)
+        self.assertIn('name="earthquake_enabled"', page)
+        self.assertIn('name="minimum_severity"', page)
+        self.assertIn('id="place-search-form"', page)
+        self.assertIn('data-edit-place=', page)
+        self.assertIn('data-delete-place=', page)
+        self.assertIn('name="weather_enabled"', page)
+        self.assertIn('name="earthquake_enabled"', page)
+        self.assertIn('name="minimum_severity"', page)
 
     def register_and_login(self, email="person@example.com"):
         status, result = self.request("POST", "/api/register", {"email": email, "password": "a-strong-password"})
@@ -249,6 +261,38 @@ class APITests(unittest.TestCase):
         self.assertNotIn(place["id"], remaining.places)
         self.assertEqual(remaining.inbox_for(person_id), [])
         remaining.close()
+
+    def test_person_can_create_update_and_delete_geocoded_place(self):
+        token = self.register_and_login()
+        status, lookup = self.request("GET", "/api/geocode", token=token, query="q=Washington")
+        self.assertEqual(status, 200)
+        selected = lookup["results"][0]
+        status, place = self.request("POST", "/api/places", {
+            "name": "Home", "latitude": selected["latitude"], "longitude": selected["longitude"],
+        }, token)
+        self.assertEqual(status, 201)
+        self.assertEqual((place["radius_km"], place["weather_enabled"], place["earthquake_enabled"], place["minimum_severity"]), (25, True, True, "moderate"))
+
+        source = AlertMesh(self.mailer, db_path=self.app.database)
+        source.ingest(Alert("usgs:place-lifecycle", "usgs", "earthquake", "Nearby quake", self.now, latitude=38, longitude=-77))
+        source.close()
+        status, inbox = self.request("GET", "/api/inbox", token=token)
+        self.assertEqual(inbox["alerts"][0]["places"], [{"id": place["id"], "name": "Home"}])
+
+        status, updated = self.request("PATCH", f"/api/places/{place['id']}", {
+            "name": "Cabin", "radius_km": 10, "weather_enabled": False,
+            "earthquake_enabled": True, "minimum_severity": "severe",
+        }, token)
+        self.assertEqual(status, 200)
+        self.assertEqual((updated["name"], updated["radius_km"], updated["weather_enabled"], updated["minimum_severity"]), ("Cabin", 10, False, "severe"))
+
+        self.assertEqual(self.request("DELETE", f"/api/places/{place['id']}", token=token)[0], 200)
+        status, inbox = self.request("GET", "/api/inbox", token=token)
+        self.assertEqual((status, inbox["alerts"][0]["places"]), (200, []))
+        source = AlertMesh(self.mailer, db_path=self.app.database)
+        source.ingest(Alert("usgs:after-place-delete", "usgs", "earthquake", "Another quake", self.now, latitude=38, longitude=-77))
+        source.close()
+        self.assertEqual(len(self.request("GET", "/api/inbox", token=token)[1]["alerts"]), 1)
 
     def test_verification_token_expires(self):
         self.request("POST", "/api/register", {"email": "late@example.com", "password": "a-strong-password"})

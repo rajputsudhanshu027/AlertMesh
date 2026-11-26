@@ -9,8 +9,8 @@
     :root {
       color-scheme: light;
       --ink: #17353b;
-      --muted: #60777a;
-      --quiet: #8ca0a0;
+      --muted: #586f72;
+      --quiet: #5d7476;
       --paper: #f3f6f2;
       --surface: #fcfdf9;
       --line: #dce6df;
@@ -104,13 +104,13 @@
     .alert-card[data-status="cancelled"] .severity-bar, .alert-card[data-status="expired"] .severity-bar { background: #8b9996; }
     .alert-content { padding: 13px 0 12px; min-width: 0; }
     .alert-meta { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-bottom: 5px; }
-    .tag { display: inline-flex; align-items: center; padding: 3px 7px; border-radius: 5px; background: var(--teal-wash); color: #36625f; font-size: 10px; font-weight: 650; }
+    .tag { display: inline-flex; align-items: center; padding: 3px 7px; border-radius: 5px; background: var(--teal-wash); color: #36625f; font-size: 11px; font-weight: 650; }
     .tag.weather { background: var(--amber-wash); color: #815117; }
     .tag.quake { background: var(--blue-wash); color: #3f646d; }
     .tag.terminal { background: #edf0ed; color: #596b69; }
     .alert-title { display: block; overflow: hidden; color: var(--deep); font-size: 13px; font-weight: 650; line-height: 1.35; text-overflow: ellipsis; }
     .alert-subline { display: block; margin-top: 5px; color: var(--muted); font-size: 11px; line-height: 1.4; }
-    .alert-time { padding: 14px 12px 12px 0; color: var(--quiet); font-size: 10px; white-space: nowrap; }
+    .alert-time { padding: 14px 12px 12px 0; color: var(--quiet); font-size: 11px; white-space: nowrap; }
     .empty-state { padding: 24px 18px; border: 1px dashed #bbc9c1; border-radius: 11px; color: var(--muted); background: rgba(255,255,255,.45); font-size: 13px; line-height: 1.5; }
 
     .detail-card { position: sticky; top: 16px; overflow: hidden; border: 1px solid var(--line); border-radius: 13px; background: var(--surface); box-shadow: var(--shadow); }
@@ -121,17 +121,17 @@
     .map-wrap { padding: 13px 15px 11px; background: #eef3ee; border-bottom: 1px solid var(--line); }
     .map-topline { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 7px; }
     .map-topline strong { font-size: 11px; font-weight: 650; }
-    .map-topline span { color: var(--muted); font-size: 10px; }
+    .map-topline span { color: var(--muted); font-size: 11px; }
     .footprint-map { display: block; width: 100%; height: 142px; border: 1px solid #d5e1d9; border-radius: 8px; background: #e5eee8; }
-    .map-caption { margin: 7px 0 0; color: var(--muted); font-size: 10px; line-height: 1.45; }
+    .map-caption { margin: 7px 0 0; color: var(--muted); font-size: 11px; line-height: 1.45; }
     .detail-section { padding: 14px 17px; border-bottom: 1px solid var(--line); }
     .detail-section:last-child { border-bottom: 0; }
-    .detail-section h3 { margin: 0 0 9px; color: var(--muted); font-size: 10px; font-weight: 700; letter-spacing: .02em; }
+    .detail-section h3 { margin: 0 0 9px; color: var(--muted); font-size: 11px; font-weight: 700; letter-spacing: .02em; }
     .matched-places { display: flex; flex-wrap: wrap; gap: 6px; }
     .matched-place { padding: 5px 8px; border-radius: 6px; background: #e9f1ed; color: #355e58; font-size: 11px; }
     .instruction { margin: 0; color: var(--ink); font-size: 12px; line-height: 1.55; }
     .detail-facts { display: grid; grid-template-columns: 1fr 1fr; gap: 11px 12px; }
-    .fact span { display: block; margin-bottom: 3px; color: var(--quiet); font-size: 10px; }
+    .fact span { display: block; margin-bottom: 3px; color: var(--quiet); font-size: 11px; }
     .fact strong { display: block; color: var(--ink); font-size: 11px; font-weight: 620; line-height: 1.4; }
     .delivery-state { display: inline-flex; align-items: center; gap: 7px; color: var(--muted); font-size: 11px; }
     .delivery-state::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: #4d8d72; }
@@ -141,14 +141,13 @@
     .error-state { padding: 24px; border: 1px solid #e3b5aa; border-radius: 12px; background: #fff7f3; color: #713c33; }
     .error-state p { margin: 0 0 12px; font-size: 13px; line-height: 1.5; }
     .error-state button { border: 1px solid #c78475; border-radius: 7px; padding: 7px 10px; background: #fff; color: #713c33; cursor: pointer; }
-    .footer-note { margin: 22px 0 0; color: var(--quiet); font-size: 10px; text-align: right; }
+    .footer-note { margin: 22px 0 0; color: var(--quiet); font-size: 11px; text-align: right; }
     .auth-panel, .account-panel { margin: 34px auto 0; max-width: 980px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); box-shadow: var(--shadow); }
     .auth-panel { display: grid; grid-template-columns: 1fr 1fr; gap: 48px; padding: clamp(24px, 5vw, 54px); }
     .auth-panel[hidden], .account-panel[hidden] { display: none; }
     .auth-copy h2, .account-heading h2 { margin: 8px 0 12px; color: var(--deep); font-family: Georgia, "Times New Roman", serif; font-size: clamp(28px, 4vw, 42px); font-weight: 500; letter-spacing: -.035em; }
-    .auth-copy > p:not(.eyebrow), .account-heading p { max-width: 390px; color: var(--muted); font-size: 13px; line-height: 1.65; }
-    .eyebrow { margin: 0; color: #5c8275; font-size: 10px; font-weight: 750; letter-spacing: .12em; text-transform: uppercase; }
-    .demo-note { color: var(--quiet); font-size: 11px; line-height: 1.55; }
+    .auth-copy > p, .account-heading p { max-width: 390px; color: var(--muted); font-size: 13px; line-height: 1.65; }
+    .demo-note { color: var(--quiet); font-size: 12px; line-height: 1.55; }
     .auth-card { align-self: center; }
     .auth-tabs { display: flex; gap: 5px; margin-bottom: 22px; padding-bottom: 10px; border-bottom: 1px solid var(--line); }
     .auth-tabs button { border: 0; border-radius: 7px; padding: 8px 9px; background: transparent; color: var(--muted); font: inherit; font-size: 11px; cursor: pointer; }
@@ -157,10 +156,10 @@
     #auth-form label { margin-top: 6px; color: var(--ink); font-size: 11px; font-weight: 650; }
     #auth-form input { min-height: 42px; width: 100%; box-sizing: border-box; border: 1px solid #cbd7d0; border-radius: 7px; padding: 9px 11px; background: #fff; color: var(--ink); font: inherit; font-size: 13px; }
     #auth-form input:focus-visible, .auth-tabs button:focus-visible, .reset-button:focus-visible { outline: 3px solid #8ab7a6; outline-offset: 2px; }
-    .field-help { margin: -3px 0 4px; color: var(--quiet); font-size: 10px; line-height: 1.5; }
+    .field-help { margin: -3px 0 4px; color: var(--quiet); font-size: 12px; line-height: 1.5; }
     .auth-submit { margin-top: 9px; min-height: 42px; border: 0; border-radius: 7px; background: #244f4b; color: white; font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; }
     .text-button { border: 0; padding: 5px 0; background: transparent; color: #496d63; font: inherit; font-size: 11px; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
-    #auth-message { min-height: 20px; margin: 14px 0 0; color: #7a4c24; font-size: 11px; line-height: 1.5; }
+    #auth-message { min-height: 20px; margin: 14px 0 0; color: #7a4c24; font-size: 12px; line-height: 1.5; }
     .account-panel { padding: clamp(22px, 4vw, 38px); }
     .account-heading { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding-bottom: 21px; border-bottom: 1px solid var(--line); }
     .account-heading h2 { font-size: 32px; }
@@ -171,7 +170,52 @@
     .account-columns ul { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
     .account-columns li { display: grid; gap: 5px; padding: 12px; border: 1px solid var(--line); border-radius: 8px; }
     .account-columns li strong { color: var(--deep); font-size: 12px; }
-    .account-columns li span, .account-empty { color: var(--muted); font-size: 11px; line-height: 1.5; }
+    .account-columns li span, .account-empty { color: var(--muted); font-size: 12px; line-height: 1.5; }
+    .places-layout { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(240px, .65fr); gap: 38px; padding-top: 24px; }
+    .place-manager, .inbox-summary { min-width: 0; }
+    .place-manager h3, .inbox-summary h3 { margin: 0 0 9px; color: var(--deep); font-size: 14px; font-weight: 680; }
+    .section-help { margin: 0 0 15px; color: var(--muted); font-size: 12px; line-height: 1.5; }
+    .place-search { display: grid; gap: 7px; }
+    .place-search > label, .place-form > label { color: var(--ink); font-size: 11px; font-weight: 650; }
+    .search-controls { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
+    .search-controls input, .place-form > input, .place-form select { width: 100%; min-height: 40px; border: 1px solid #cbd7d0; border-radius: 7px; padding: 8px 10px; background: #fff; color: var(--ink); font: inherit; font-size: 12px; }
+    .search-controls input:focus-visible, .place-form input:focus-visible, .place-form select:focus-visible { outline: 3px solid #8ab7a6; outline-offset: 2px; }
+    .action-button { min-height: 34px; border: 1px solid #cbd7d0; border-radius: 7px; padding: 7px 10px; background: #fff; color: var(--deep); font: inherit; font-size: 11px; font-weight: 650; cursor: pointer; }
+    .action-button:hover { background: #eff4f0; }
+    .action-button:disabled { opacity: .55; cursor: wait; }
+    .action-button.primary { border-color: #244f4b; background: #244f4b; color: white; }
+    .action-button.primary:hover { background: #32635e; }
+    .action-button.danger { color: #8d4338; }
+    .form-status { min-height: 18px; margin: 9px 0; color: #496d63; font-size: 12px; line-height: 1.5; }
+    .place-results { display: grid; gap: 5px; margin: 0 0 14px; }
+    .place-result { display: grid; gap: 3px; padding: 10px 11px; border: 1px solid var(--line); border-radius: 7px; background: #fff; color: var(--ink); text-align: left; cursor: pointer; }
+    .place-result:hover, .place-result:focus-visible { border-color: #8ab7a6; background: #f4f8f4; }
+    .place-result strong { font-size: 11px; font-weight: 650; }
+    .place-result span, .attribution { color: var(--muted); font-size: 11px; }
+    .place-form { display: grid; gap: 8px; margin: 15px 0 20px; padding: 15px; border: 1px solid var(--line); border-radius: 10px; background: #f7f9f5; }
+    .editor-heading, .places-list-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+    .editor-heading h3, .places-list-heading h3 { margin: 0; }
+    .editor-heading .text-button { flex: 0 0 auto; }
+    .place-form .section-help { margin: 0 0 2px; }
+    .place-form fieldset { display: grid; gap: 8px; margin: 3px 0; padding: 10px; border: 1px solid var(--line); border-radius: 7px; }
+    .place-form legend { padding: 0 4px; color: var(--muted); font-size: 11px; font-weight: 650; }
+    .check-row { display: flex; align-items: center; gap: 8px; color: var(--ink); font-size: 11px; cursor: pointer; }
+    .check-row input { width: 15px; height: 15px; accent-color: #376d63; }
+    .editor-actions { display: flex; justify-content: flex-end; margin-top: 4px; }
+    .places-list-heading { margin: 20px 0 10px; padding-top: 15px; border-top: 1px solid var(--line); }
+    .places-list-heading span { color: var(--quiet); font-size: 11px; }
+    .managed-places { display: grid; }
+    .managed-place { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--line); }
+    .managed-place-copy { display: grid; min-width: 0; gap: 4px; }
+    .managed-place-copy strong { color: var(--deep); font-size: 12px; }
+    .managed-place-copy span { color: var(--muted); font-size: 11px; line-height: 1.4; }
+    .place-actions { display: flex; flex: 0 0 auto; gap: 6px; }
+    .inbox-summary { padding-left: 24px; border-left: 1px solid var(--line); }
+    .inbox-summary ul { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+    .inbox-summary li { display: grid; gap: 5px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+    .inbox-summary li strong { color: var(--deep); font-size: 11px; }
+    .inbox-summary li span { color: var(--muted); font-size: 11px; line-height: 1.45; }
+    .attribution { margin: 13px 0 0; }
 
     @media (max-width: 1100px) {
       .workspace { grid-template-columns: minmax(170px, 205px) minmax(320px, 1fr); }
@@ -207,16 +251,23 @@
       .detail-card { display: block; }
       .detail-top, .map-wrap { border-bottom: 1px solid var(--line); }
       .detail-section { border-bottom: 1px solid var(--line); }
-      .alert-time { padding-right: 9px; font-size: 9px; }
+      .alert-time { padding-right: 9px; font-size: 11px; }
       .footer-note { text-align: left; }
       .auth-panel { grid-template-columns: 1fr; gap: 22px; padding: 23px; }
       .auth-copy h2 { font-size: 32px; }
-      .auth-tabs { justify-content: space-between; }
+      .auth-tabs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .auth-tabs button { width: 100%; }
       .account-heading { align-items: flex-start; flex-direction: column; }
       .account-columns { grid-template-columns: 1fr; gap: 24px; }
+      .places-layout { grid-template-columns: 1fr; gap: 24px; }
+      .inbox-summary { padding: 20px 0 0; border-top: 1px solid var(--line); border-left: 0; }
+      .managed-place { align-items: flex-start; flex-direction: column; }
+      .place-actions { width: 100%; }
+      .place-actions .action-button { flex: 1; }
     }
     @media (max-width: 390px) {
       .topbar-right { gap: 8px; }
+      .reset-button { padding: 6px 7px; font-size: 11px; }
       .demo-label { font-size: 0; gap: 0; }
       .demo-label::before { width: 8px; height: 8px; }
       .places-list { grid-template-columns: 1fr; }
@@ -257,7 +308,7 @@
 
       <div id="app-state" class="loading" role="status">Loading seeded demo data…</div>
       <section id="auth-panel" class="auth-panel" aria-labelledby="auth-title" hidden>
-        <div class="auth-copy"><p class="eyebrow">Your AlertMesh account</p><h2 id="auth-title">Keep your places close.</h2><p>Register with your email, verify it with the token we send, then sign in to see your account.</p><p class="demo-note">This local browser preview uses the configured verification mailer. It never sends alert emails from this screen.</p></div>
+        <div class="auth-copy"><h2 id="auth-title">Keep your places close.</h2><p>Register with your email, verify it with the token we send, then sign in to see your account.</p><p class="demo-note">This local browser preview uses the configured verification mailer. It never sends alert emails from this screen.</p></div>
         <div class="auth-card">
           <div class="auth-tabs" role="group" aria-label="Account action"><button type="button" data-auth-mode="login" aria-pressed="true">Sign in</button><button type="button" data-auth-mode="register" aria-pressed="false">Create account</button><button type="button" data-auth-mode="verify" aria-pressed="false">Verify email</button><button type="button" data-auth-mode="resend" aria-pressed="false">Resend token</button></div>
           <form id="auth-form" novalidate></form><p id="auth-message" role="status" aria-live="polite"></p><button class="text-button" id="return-demo" type="button">Return to the local demo</button>
@@ -307,7 +358,7 @@
 
   <script>
     (() => {
-      const state = { data: null, filter: "all", selectedId: null, selectedPlace: null, authMode: "login" };
+      const state = { data: null, filter: "all", selectedId: null, selectedPlace: null, authMode: "login", account: null, searchResults: [], selectedGeocode: null, editingPlaceId: null, savingPlace: false, placeNotice: "", placeDraft: null };
       const appState = document.getElementById("app-state");
       const dashboard = document.getElementById("dashboard");
       const authPanel = document.getElementById("auth-panel");
@@ -376,12 +427,129 @@
         if (!placesResponse.ok || !inboxResponse.ok) throw new Error("Your account data could not be loaded. Please sign in again.");
         const places = (await placesResponse.json()).places;
         const inbox = (await inboxResponse.json()).alerts;
+        state.account = { person, places, inbox };
         authPanel.hidden = true; dashboard.hidden = true; accountPanel.hidden = false;
         document.getElementById("reset-demo").hidden = true;
         document.getElementById("account-access").hidden = true;
         document.getElementById("sign-out").hidden = false;
-        accountPanel.innerHTML = `<div class="account-heading"><div><p class="eyebrow">Signed in</p><h2 id="account-title">Welcome to AlertMesh</h2><p>${escapeHtml(person.email)}</p></div><span class="account-stat">${places.length} ${places.length === 1 ? "Place" : "Places"} · ${inbox.length} Inbox ${inbox.length === 1 ? "entry" : "entries"}</span></div><div class="account-columns"><section><h3>Your Places</h3>${places.length ? `<ul>${places.map(place => `<li><strong>${escapeHtml(place.name)}</strong><span>${Number(place.latitude).toFixed(3)}, ${Number(place.longitude).toFixed(3)} · ${escapeHtml(String(place.radius_km))} km radius</span></li>`).join("")}</ul>` : `<p class="account-empty">No Places yet. Your account is ready for monitoring setup.</p>`}</section><section><h3>Your Inbox</h3>${inbox.length ? `<ul>${inbox.map(alert => `<li><strong>${escapeHtml(alert.title)}</strong><span>${escapeHtml(alert.status)} · ${escapeHtml(alert.places.map(place => place.name).join(", ") || "No matching Places")}</span></li>`).join("")}</ul>` : `<p class="account-empty">No matching Alerts yet.</p>`}</section></div><p class="demo-note">Your session is stored in a protected browser cookie. Sign out to close this account view.</p>`;
+        renderAccount();
       }
+
+      function renderAccount() {
+        const { person, places, inbox } = state.account;
+        accountPanel.innerHTML = `<div class="account-heading"><div><h2 id="account-title">Your monitored Places</h2><p>${escapeHtml(person.email)}</p></div><span class="account-stat">${places.length} ${places.length === 1 ? "Place" : "Places"} · ${inbox.length} Inbox ${inbox.length === 1 ? "entry" : "entries"}</span></div>
+          <div class="places-layout"><section class="place-manager" aria-labelledby="places-title"><h3 id="places-title">Find and manage Places</h3><p class="section-help">Search for a U.S. address or city. Only results in the contiguous United States can be added.</p>
+            <form id="place-search-form" class="place-search"><label for="place-query">Address or city</label><div class="search-controls"><input id="place-query" name="q" type="search" maxlength="200" placeholder="e.g. Denver, Colorado" required><button class="action-button primary" type="submit">Search</button></div></form>
+            <p id="place-search-status" class="form-status" role="status" aria-live="polite"></p><div id="place-results" class="place-results" role="group" aria-label="Address search results"></div>
+            <div id="place-editor"></div>
+            <div class="places-list-heading"><h3>Your Places</h3><span>${places.length} saved</span></div>
+            <div id="managed-places" class="managed-places">${places.length ? places.map(place => `<article class="managed-place"><div class="managed-place-copy"><strong>${escapeHtml(place.name)}</strong><span>${Number(place.latitude).toFixed(3)}, ${Number(place.longitude).toFixed(3)} · ${escapeHtml(String(place.radius_km))} km radius</span><span>${place.weather_enabled ? `Weather: ${escapeHtml(place.minimum_severity)}+` : "Weather off"} · ${place.earthquake_enabled ? "Earthquakes on" : "Earthquakes off"}</span></div><div class="place-actions"><button class="action-button" type="button" data-edit-place="${escapeHtml(place.id)}">Edit</button><button class="action-button danger" type="button" data-delete-place="${escapeHtml(place.id)}">Remove</button></div></article>`).join("") : `<p class="account-empty">No Places saved yet. Search for a city or address above to add your first Place.</p>`}</div><p id="place-action-status" class="form-status" role="status" aria-live="polite">${escapeHtml(state.placeNotice)}</p><p class="field-help">New Places default to 25 km, weather and earthquake alerts on, and moderate minimum weather severity.</p><p class="attribution">Geocoding by ${escapeHtml("© OpenStreetMap contributors")}</p>
+          </section><section class="inbox-summary" aria-labelledby="inbox-title"><h3 id="inbox-title">Your Inbox</h3>${inbox.length ? `<ul>${inbox.map(alert => `<li><strong>${escapeHtml(alert.title)}</strong><span>${escapeHtml(alert.status)} · ${escapeHtml(alert.places.map(place => place.name).join(", ") || "Place removed")}</span></li>`).join("")}</ul>` : `<p class="account-empty">No matching Alerts yet. Alerts will appear here when they match your Places.</p>`}</section></div><p class="demo-note">Your session is stored in a protected browser cookie. Sign out to close this account view.</p>`;
+        renderPlaceEditor();
+      }
+
+      function renderPlaceResults() {
+        const results = document.getElementById("place-results");
+        if (!results) return;
+        if (!state.searchResults.length) { results.innerHTML = ""; return; }
+        results.innerHTML = state.searchResults.map((place, index) => `<button class="place-result" type="button" data-place-result="${index}"><strong>${escapeHtml(place.name)}</strong><span>${escapeHtml(place.state_code)} · ${Number(place.latitude).toFixed(3)}, ${Number(place.longitude).toFixed(3)}</span></button>`).join("");
+      }
+
+      function renderPlaceEditor() {
+        const editor = document.getElementById("place-editor");
+        if (!editor) return;
+        const existing = state.account.places.find(place => place.id === state.editingPlaceId);
+        if (!existing && !state.selectedGeocode) { editor.innerHTML = ""; return; }
+        const place = state.placeDraft || existing || { name: state.selectedGeocode.name.slice(0, 80), radius_km: 25, weather_enabled: true, earthquake_enabled: true, minimum_severity: "moderate" };
+        const options = (values, selected) => values.map(value => `<option value="${value}" ${String(selected) === value ? "selected" : ""}>${value} km</option>`).join("");
+        editor.innerHTML = `<form id="place-form" class="place-form"><div class="editor-heading"><h3>${existing ? "Edit Place" : "Add a Place"}</h3><button class="text-button" type="button" id="cancel-place-edit">Cancel</button></div><p class="section-help">${existing ? `${Number(existing.latitude).toFixed(3)}, ${Number(existing.longitude).toFixed(3)}` : escapeHtml(state.selectedGeocode.name)}</p>
+          <label for="place-name">Place name</label><input id="place-name" name="name" maxlength="80" value="${escapeHtml(place.name)}" required>
+          <label for="place-radius">Earthquake radius</label><select id="place-radius" name="radius_km">${options(["5", "10", "25", "50", "100"], place.radius_km)}</select>
+          <fieldset><legend>Alert types</legend><label class="check-row"><input type="checkbox" name="weather_enabled" ${place.weather_enabled === true || place.weather_enabled === "on" ? "checked" : ""}> Weather alerts</label><label class="check-row"><input type="checkbox" name="earthquake_enabled" ${place.earthquake_enabled === true || place.earthquake_enabled === "on" ? "checked" : ""}> Earthquake alerts</label></fieldset>
+          <label for="place-severity">Minimum weather severity</label><select id="place-severity" name="minimum_severity">${["unknown", "minor", "moderate", "severe", "extreme"].map(value => `<option value="${value}" ${place.minimum_severity === value ? "selected" : ""}>${value === "unknown" ? "Unknown severity" : value[0].toUpperCase() + value.slice(1)}</option>`).join("")}</select>
+          <div class="editor-actions"><button class="action-button primary" type="submit" ${state.savingPlace ? "disabled" : ""}>${state.savingPlace ? "Saving…" : existing ? "Save changes" : "Add Place"}</button></div></form>`;
+        editor.querySelector("#place-name").focus();
+      }
+
+      async function placeRequest(path, method = "GET", payload) {
+        const response = await fetch(path, { method, credentials: "same-origin", cache: "no-store", headers: payload ? { "Content-Type": "application/json", Accept: "application/json" } : { Accept: "application/json" }, body: payload ? JSON.stringify(payload) : undefined });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || "Could not complete this Place request. Please try again.");
+        return result;
+      }
+
+      async function searchPlaces(query) {
+        const status = document.getElementById("place-search-status");
+        const button = document.querySelector("#place-search-form button[type=submit]");
+        button.disabled = true; status.textContent = "Searching addresses…";
+        try {
+          const result = await placeRequest(`/api/geocode?q=${encodeURIComponent(query)}`);
+          state.searchResults = result.results;
+          renderPlaceResults();
+          status.textContent = result.results.length ? `${result.results.length} place${result.results.length === 1 ? "" : "s"} found. Choose one to continue.` : "No contiguous-U.S. places matched. Try a nearby city or a fuller address.";
+        } catch (error) {
+          state.searchResults = []; renderPlaceResults();
+          status.textContent = error.message.includes("unavailable") ? "Address search is temporarily unavailable. Check your connection and try again." : error.message;
+        } finally { button.disabled = false; }
+      }
+
+      async function savePlace(form) {
+        const values = Object.fromEntries(new FormData(form));
+        values.radius_km = Number(values.radius_km);
+        values.weather_enabled = form.elements.weather_enabled.checked;
+        values.earthquake_enabled = form.elements.earthquake_enabled.checked;
+        state.placeDraft = values;
+        state.savingPlace = true; renderPlaceEditor();
+        const status = document.getElementById("place-action-status");
+        try {
+          if (state.editingPlaceId) await placeRequest(`/api/places/${encodeURIComponent(state.editingPlaceId)}`, "PATCH", values);
+          else await placeRequest("/api/places", "POST", { ...values, latitude: state.selectedGeocode.latitude, longitude: state.selectedGeocode.longitude });
+          state.placeNotice = state.editingPlaceId ? "Place preferences saved." : "Place added. Current matching Alerts are now in your Inbox.";
+          state.editingPlaceId = null; state.selectedGeocode = null; state.searchResults = []; state.placeDraft = null;
+          await loadAccount();
+        } catch (error) {
+          state.savingPlace = false;
+          status.textContent = error.message;
+          renderPlaceEditor();
+          return;
+        }
+        state.savingPlace = false;
+      }
+
+      async function removePlace(placeId) {
+        const place = state.account.places.find(item => item.id === placeId);
+        if (!place || !window.confirm(`Remove ${place.name}? It will stop matching new Alerts immediately.`)) return;
+        const status = document.getElementById("place-action-status");
+        status.textContent = `Removing ${place.name}…`;
+        try {
+          await placeRequest(`/api/places/${encodeURIComponent(placeId)}`, "DELETE");
+          state.placeNotice = `${place.name} removed. Its name has been cleared from Inbox match explanations.`;
+          state.editingPlaceId = null; state.selectedGeocode = null; state.placeDraft = null;
+          await loadAccount();
+        } catch (error) { status.textContent = error.message; }
+      }
+
+      accountPanel.addEventListener("submit", event => {
+        if (event.target.id === "place-search-form") {
+          event.preventDefault();
+          const query = new FormData(event.target).get("q").trim();
+          if (query) searchPlaces(query);
+        } else if (event.target.id === "place-form") {
+          event.preventDefault(); savePlace(event.target);
+        }
+      });
+      accountPanel.addEventListener("click", event => {
+        const resultButton = event.target.closest("[data-place-result]");
+        if (resultButton) {
+          state.selectedGeocode = state.searchResults[Number(resultButton.dataset.placeResult)];
+          state.editingPlaceId = null; state.placeDraft = null; renderPlaceEditor(); return;
+        }
+        const editButton = event.target.closest("[data-edit-place]");
+        if (editButton) { state.editingPlaceId = editButton.dataset.editPlace; state.selectedGeocode = null; state.placeDraft = null; renderPlaceEditor(); return; }
+        const deleteButton = event.target.closest("[data-delete-place]");
+        if (deleteButton) { removePlace(deleteButton.dataset.deletePlace); return; }
+        if (event.target.closest("#cancel-place-edit")) { state.editingPlaceId = null; state.selectedGeocode = null; state.placeDraft = null; renderPlaceEditor(); }
+      });
 
       document.querySelectorAll("[data-auth-mode]").forEach(button => button.addEventListener("click", () => { state.authMode = button.dataset.authMode; authMessage.textContent = ""; renderAuthForm(); }));
       authForm.addEventListener("submit", async event => {
