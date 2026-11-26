@@ -175,6 +175,10 @@ class SourceAdapterTests(unittest.TestCase):
             self.assertEqual(len(app.inbox_for("person")), 1)
             self.assertEqual(len(email.messages), 1)
             self.assertFalse(app.source_status("usgs")["stale"])
+            metrics = app.metrics.snapshot()
+            self.assertEqual((metrics["ingestion.attempts"], metrics["ingestion.retries"]), (3, 2))
+            self.assertEqual((metrics["ingestion.successes"], metrics["ingestion.retry_successes"]), (1, 1))
+            self.assertEqual((metrics["ingestion.alerts_received"], metrics["ingestion.alerts_processed"]), (1, 1))
             app.close()
 
     def test_runner_marks_failed_source_stale_and_preserves_last_known_alerts(self):
@@ -193,6 +197,26 @@ class SourceAdapterTests(unittest.TestCase):
             self.assertFalse(result.success)
             self.assertTrue(app.source_status("usgs")["stale"])
             self.assertEqual(len(app.inbox_for("person")), 1)
+            metrics = app.metrics.snapshot()
+            self.assertEqual((metrics["ingestion.attempts"], metrics["ingestion.retries"]), (2, 1))
+            self.assertEqual(metrics["ingestion.failures"], 1)
+            app.close()
+
+    def test_runner_counts_duplicate_suppression_without_personal_labels(self):
+        with tempfile.TemporaryDirectory() as directory:
+            app = AlertMesh(FakeEmail(), db_path=f"{directory}/alerts.sqlite3")
+            alert = USGSAdapter(FakeTransport({})).normalize_feature({
+                "id": "us7000duplicate", "properties": {"time": 1775000000000, "title": "Repeated quake"},
+                "geometry": {"type": "Point", "coordinates": [-77, 38, 4]},
+            })
+            runner = IngestionRunner(app, {"usgs": SequenceSource([[alert], [Alert(**alert.__dict__) ]])}, max_attempts=1)
+            runner.run_source("usgs")
+            runner.run_source("usgs")
+            metrics = app.metrics.snapshot()
+            self.assertEqual(metrics["ingestion.duplicates_suppressed"], 1)
+            stored = " ".join(str(row) for row in app.metrics._connection.execute("SELECT name,value FROM operational_metrics"))
+            self.assertNotIn("Repeated quake", stored)
+            self.assertNotIn("person", stored)
             app.close()
 
     def test_empty_successful_fetch_still_records_freshness(self):

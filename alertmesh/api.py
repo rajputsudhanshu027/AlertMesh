@@ -16,7 +16,9 @@ import secrets
 import smtplib
 import sqlite3
 import sys
+import time
 import uuid
+from collections import deque
 from urllib.parse import parse_qs
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
@@ -77,6 +79,8 @@ class AlertMeshAPI:
         self.mailer = mailer
         self.clock = clock
         self.geocoder = geocoder or NominatimGeocoder()
+        self._started_at = time.monotonic()
+        self._api_latencies_ms = deque(maxlen=1000)
         self.flow = AlertMesh(_DiscardEmail(), db_path=database)
         self._initialize()
         self._sync_domain()
@@ -85,6 +89,7 @@ class AlertMeshAPI:
         self.flow.close()
 
     def __call__(self, environ, start_response):
+        started = time.perf_counter()
         method = environ.get("REQUEST_METHOD", "GET").upper()
         path = environ.get("PATH_INFO", "/")
         try:
@@ -96,6 +101,7 @@ class AlertMeshAPI:
             response, status = {"error": str(error) or "Invalid request"}, 400
         except Exception:
             response, status = {"error": "Internal server error"}, 500
+        self._api_latencies_ms.append((time.perf_counter() - started) * 1000)
         encoded = json.dumps(response, separators=(",", ":")).encode("utf-8")
         start_response(f"{status} {HTTPStatus(status).phrase}", [("Content-Type", "application/json; charset=utf-8"), ("Content-Length", str(len(encoded))), ("Cache-Control", "no-store")])
         return [encoded]
@@ -240,6 +246,8 @@ class AlertMeshAPI:
                 return {"deleted": True}, 200
         if path == "/api/inbox" and method == "GET":
             return self._inbox(person_id), 200
+        if path == "/api/metrics" and method == "GET":
+            return self._metrics(), 200
         raise APIError(404, "Route not found")
 
     def _register(self, body):
@@ -406,6 +414,38 @@ class AlertMeshAPI:
             "stale": self.flow.source_stale.get(source, True),
         } for source in sources]
         return {"alerts": alerts, "sources": source_status}
+
+    def _metrics(self):
+        self.flow.refresh()
+        metrics = self.flow.metrics.snapshot()
+        samples = sorted(self._api_latencies_ms)
+        p95 = samples[math.ceil(len(samples) * 0.95) - 1] if samples else 0.0
+        delivery_counts = {status: sum(value == status for value in self.flow.delivery_status.values())
+                           for status in ("sent", "failed")}
+        sources = sorted(set(self.flow.last_checked) | set(self.flow.source_stale))
+        source_status = [{
+            "source": source,
+            "last_checked": self.flow.last_checked[source].isoformat() if source in self.flow.last_checked else None,
+            "stale": self.flow.source_stale.get(source, True),
+        } for source in sources]
+        processing_count = metrics["alert_processing_count"]
+        average_processing_ms = metrics["alert_processing_ms_total"] / processing_count if processing_count else 0.0
+        return {
+            "uptime_seconds": round(time.monotonic() - self._started_at, 3),
+            "api_p95_latency_ms": round(p95, 3),
+            "ingestion": {key.removeprefix("ingestion."): value for key, value in metrics.items() if key.startswith("ingestion.")},
+            "alert_processing_average_ms": round(average_processing_ms, 3),
+            "delivery": {
+                "attempts": metrics["delivery.attempts"],
+                "sent": metrics["delivery.sent"],
+                "failed": metrics["delivery.failed"],
+                "retries": metrics["delivery.retries"],
+                "retry_successes": metrics["delivery.retry_successes"],
+                "status_counts": delivery_counts,
+            },
+            "pending_delivery_backlog": delivery_counts["failed"],
+            "sources": source_status,
+        }
 
     @staticmethod
     def _validated_place(body, *, creating, validate_radius=True):

@@ -349,23 +349,36 @@ class IngestionRunner:
                 if retryable and attempt < self.max_attempts:
                     self.sleep(min(self.base_delay * (2 ** (attempt - 1)), self.max_delay))
                     continue
+                self.app.metrics.increment("ingestion.attempts", attempts)
+                self.app.metrics.increment("ingestion.retries", attempts - 1)
+                self.app.metrics.increment("ingestion.failures")
                 self.app.mark_source_stale(source)
                 logger.warning("Ingestion failed for %s after %d attempt(s)", source, attempt)
                 return IngestionResult(source, False, attempt, 0, 0, 0, self.app.source_status(source)["last_checked"])
         checked_at = self.clock()
+        self.app.metrics.increment("ingestion.attempts", attempts)
+        self.app.metrics.increment("ingestion.retries", attempts - 1)
+        if attempts > 1:
+            self.app.metrics.increment("ingestion.retry_successes")
+        self.app.metrics.increment("ingestion.alerts_received", len(alerts))
         self.app.mark_source_checked(source, checked_at)
         ingested = failed = 0
         for alert in alerts:
             try:
-                self.app.ingest(alert, checked_at=checked_at)
+                duplicate = self.app.ingest(alert, checked_at=checked_at)
+                if duplicate:
+                    self.app.metrics.increment("ingestion.duplicates_suppressed")
                 ingested += 1
             except Exception:
                 failed += 1
                 logger.error("Failed to process a normalized alert from %s", source)
         if failed:
+            self.app.metrics.increment("ingestion.failures")
             self.app.mark_source_stale(source)
         else:
+            self.app.metrics.increment("ingestion.successes")
             self.app.expire_missing(source, {alert.id for alert in alerts}, checked_at=checked_at)
+        self.app.metrics.increment("ingestion.alerts_processed", ingested)
         return IngestionResult(source, failed == 0, attempts, len(alerts), ingested, failed, checked_at)
 
     def run_once(self) -> list[IngestionResult]:

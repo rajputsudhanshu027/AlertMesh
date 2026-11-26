@@ -10,7 +10,10 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from math import asin, cos, radians, sin, sqrt
 import os
+import time
 from typing import Protocol
+
+from .metrics import OperationalMetrics
 
 SEVERITY = {"unknown": 0, "minor": 1, "moderate": 2, "severe": 3, "extreme": 4}
 
@@ -88,12 +91,15 @@ class AlertMesh:
 
         self.email = email
         self.history_days = history_days
-        self._store = SQLiteStore(db_path or os.environ.get("ALERTMESH_DB_PATH", "alertmesh.sqlite3"))
+        self.database = db_path or os.environ.get("ALERTMESH_DB_PATH", "alertmesh.sqlite3")
+        self._store = SQLiteStore(self.database)
+        self.metrics = OperationalMetrics(self.database)
         self._reload()
 
     def close(self) -> None:
         """Close the storage connection after the application instance is retired."""
         self._store.close()
+        self.metrics.close()
 
     def _persist(self) -> None:
         self._store.save(self.people, self.places, self.alerts, self.inbox, self.delivery_status,
@@ -184,11 +190,18 @@ class AlertMesh:
                 self._emailed_revision.pop(key, None)
             self._persist()
 
-    def ingest(self, alert: Alert, *, checked_at: datetime | None = None, notify: bool = True) -> None:
-        with self._store.transaction():
-            self._reload()
-            self._ingest_current(alert, checked_at=checked_at, notify=notify)
-            self._persist()
+    def ingest(self, alert: Alert, *, checked_at: datetime | None = None, notify: bool = True) -> bool:
+        started = time.perf_counter()
+        try:
+            with self._store.transaction():
+                self._reload()
+                duplicate = self.alerts.get(alert.id) == alert
+                self._ingest_current(alert, checked_at=checked_at, notify=notify)
+                self._persist()
+                return duplicate
+        finally:
+            self.metrics.increment("alert_processing_ms_total", (time.perf_counter() - started) * 1000)
+            self.metrics.increment("alert_processing_count")
 
     def _ingest_current(self, alert: Alert, *, checked_at: datetime | None = None, notify: bool = True) -> None:
         previous = self.alerts.get(alert.id)
@@ -287,12 +300,20 @@ class AlertMesh:
         return len(expired)
 
     def _deliver(self, person: Person, alert: Alert, key: tuple[str, str], subject: str) -> None:
+        retry = self.delivery_status.get(key) == "failed"
+        self.metrics.increment("delivery.attempts")
+        if retry:
+            self.metrics.increment("delivery.retries")
         try:
             places = ", ".join(sorted(self.places[i].name for i in self.inbox[key].place_ids if i in self.places))
             self.email.send(person.email, f"{subject}: {alert.title}", f"{alert.title}\nAffected places: {places}")
             self.delivery_status[key] = "sent"
+            self.metrics.increment("delivery.sent")
+            if retry:
+                self.metrics.increment("delivery.retry_successes")
         except Exception:
             self.delivery_status[key] = "failed"
+            self.metrics.increment("delivery.failed")
 
     @staticmethod
     def _material_revision(alert: Alert) -> tuple:

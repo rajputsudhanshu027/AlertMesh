@@ -15,6 +15,9 @@ Register with `POST /api/register` using `{"email":"person@example.com","passwor
 - `GET /api/me` and `DELETE /api/me`
 - `GET /api/places`, `POST /api/places`, `PATCH /api/places/{id}`, and `DELETE /api/places/{id}`
 - `GET /api/inbox`
+- `GET /api/metrics`
 - `POST /api/logout`
 
 New Places require a name and coordinates verified to be in the contiguous United States. Radius defaults to 25 km; supported presets are 5, 10, 25, 50, and 100 km. Both hazard types default to enabled, and minimum weather severity defaults to moderate. The development server is intended for local use; deploy behind HTTPS before exposing account credentials or bearer tokens over a network.
+
+`GET /api/metrics` returns aggregate ingestion attempts, successes and failures; retry and duplicate-suppression counts; average alert processing time; delivery attempts and statuses; failed-delivery backlog; source freshness; API p95 latency; and API-process uptime. Ingestion and delivery counters are stored in SQLite as fixed-name numeric aggregates shared by the API and ingest processes. API p95 uses the most recent 1,000 requests, while uptime starts when the API process starts. Metric names and values do not include email addresses, Person IDs, or Place names. The metrics endpoint requires an authenticated bearer token; `/api/inbox` also exposes the caller's individual delivery statuses and source freshness.
