@@ -1,14 +1,19 @@
+import io
 import tempfile
 import unittest
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+from unittest.mock import patch
+from urllib.error import HTTPError
 
 from alertmesh import AlertMesh, Person, Place
 from alertmesh.sources import (
     IngestionRunner,
     NWSAdapter,
+    SourceError,
     SourceIdentityStore,
     TransientSourceError,
     USGSAdapter,
+    UrllibJsonTransport,
 )
 
 
@@ -46,15 +51,15 @@ class SequenceSource:
         return result
 
 
-def nws_feature(source_id, *, reference=None, message_type="Alert", severity="Severe", ends="2026-05-01T00:00:00+00:00"):
-    references = [{"id": reference, "sender": "w-nws.webmaster@noaa.gov", "sent": "2026-04-01T00:00:00+00:00"}] if reference else []
+def nws_feature(source_id, *, reference=None, message_type="Alert", severity="Severe", sent="2026-04-01T00:00:00+00:00", reference_sent="2026-04-01T00:00:00+00:00", ends="2026-05-01T00:00:00+00:00"):
+    references = [{"id": reference, "sender": "w-nws.webmaster@noaa.gov", "sent": reference_sent}] if reference else []
     return {
         "type": "Feature",
         "id": f"https://api.weather.gov/alerts/{source_id}",
         "geometry": {"type": "Polygon", "coordinates": [[[-78, 37], [-76, 37], [-76, 39], [-78, 39], [-78, 37]]]},
         "properties": {
             "id": source_id,
-            "sent": "2026-04-01T00:00:00+00:00",
+            "sent": sent,
             "effective": "2026-04-01T00:00:00+00:00",
             "ends": ends,
             "status": "Actual",
@@ -70,11 +75,25 @@ def nws_feature(source_id, *, reference=None, message_type="Alert", severity="Se
 
 
 class SourceAdapterTests(unittest.TestCase):
+    def test_http_408_is_retryable_but_other_client_errors_are_not(self):
+        transport = UrllibJsonTransport()
+        timeout = HTTPError("https://example.test/feed", 408, "timeout", {}, io.BytesIO())
+        with patch("alertmesh.sources.urlopen", side_effect=timeout):
+            with self.assertRaises(SourceError) as raised:
+                transport.get_json("https://example.test/feed")
+        self.assertTrue(raised.exception.transient)
+
+        bad_request = HTTPError("https://example.test/feed", 400, "bad request", {}, io.BytesIO())
+        with patch("alertmesh.sources.urlopen", side_effect=bad_request):
+            with self.assertRaises(SourceError) as raised:
+                transport.get_json("https://example.test/feed")
+        self.assertFalse(raised.exception.transient)
+
     def test_nws_normalizes_geometry_and_revisions_to_one_alert_identity(self):
         with tempfile.TemporaryDirectory() as directory:
             identity = SourceIdentityStore(f"{directory}/alerts.sqlite3")
             original = {"type": "FeatureCollection", "features": [nws_feature("urn:nws:original")]}
-            revision = {"type": "FeatureCollection", "features": [nws_feature("urn:nws:update", reference="urn:nws:original", severity="Extreme")]}
+            revision = {"type": "FeatureCollection", "features": [nws_feature("urn:nws:update", reference="urn:nws:original", severity="Extreme", sent="2026-04-02T00:00:00+00:00")]}
             transport = FakeTransport({
                 NWSAdapter.ACTIVE_FEED_URL: [original, revision],
                 NWSAdapter.RECENT_FEED_URL: [{"features": []}, {"features": []}],
@@ -84,13 +103,15 @@ class SourceAdapterTests(unittest.TestCase):
             revision = adapter.fetch()[0]
             self.assertEqual(original.id, "nws:urn:nws:original")
             self.assertEqual(revision.id, original.id)
+            self.assertEqual(revision.published_at, original.published_at)
+            self.assertEqual(revision.revision_at, datetime(2026, 4, 2, tzinfo=timezone.utc))
             self.assertEqual(revision.severity, "extreme")
             self.assertEqual(revision.geometry["type"], "Polygon")
             self.assertEqual(revision.instructions, "Secure loose objects.")
             identity.close()
             identity = SourceIdentityStore(f"{directory}/alerts.sqlite3")
             restarted = NWSAdapter(FakeTransport({
-                NWSAdapter.ACTIVE_FEED_URL: {"features": [nws_feature("urn:nws:followup", reference="urn:nws:update")]},
+                NWSAdapter.ACTIVE_FEED_URL: {"features": [nws_feature("urn:nws:followup", reference="urn:nws:update", sent="2026-04-03T00:00:00+00:00", reference_sent="2026-04-02T00:00:00+00:00")]},
                 NWSAdapter.RECENT_FEED_URL: {"features": []},
             }), identity, clock=lambda: datetime(2026, 4, 1, tzinfo=timezone.utc))
             self.assertEqual(restarted.fetch()[0].id, original.id)
@@ -111,7 +132,7 @@ class SourceAdapterTests(unittest.TestCase):
     def test_usgs_normalizes_stable_id_origin_time_and_coordinates(self):
         feed = {"type": "FeatureCollection", "features": [{
             "id": "us7000abcd",
-            "properties": {"time": 1775000000000, "updated": 1775000300000, "title": "M 2.1 - 4 km NE of Example"},
+            "properties": {"time": 1775000000000, "updated": 1775000300000, "status": "reviewed", "title": "M 2.1 - 4 km NE of Example"},
             "geometry": {"type": "Point", "coordinates": [-77.2, 38.1, 5.0]},
         }]}
         adapter = USGSAdapter(FakeTransport({USGSAdapter.FEED_URL: feed}))
@@ -120,7 +141,19 @@ class SourceAdapterTests(unittest.TestCase):
         self.assertEqual((alert.latitude, alert.longitude), (38.1, -77.2))
         self.assertEqual(alert.geometry, {"type": "Point", "coordinates": [-77.2, 38.1]})
         self.assertEqual(alert.published_at, datetime.fromtimestamp(1775000000, timezone.utc))
+        self.assertEqual(alert.revision_at, datetime.fromtimestamp(1775000300, timezone.utc))
         self.assertEqual(alert.status, "active")
+        self.assertEqual(alert.source_status, "reviewed")
+
+    def test_usgs_deleted_event_becomes_terminal(self):
+        adapter = USGSAdapter(FakeTransport({}), clock=lambda: datetime(2026, 4, 1, tzinfo=timezone.utc))
+        alert = adapter.normalize_feature({
+            "id": "us7000deleted", "properties": {"time": 1775000000000, "status": "deleted", "title": "Removed quake"},
+            "geometry": {"type": "Point", "coordinates": [-77, 38, 4]},
+        })
+        self.assertEqual(alert.status, "cancelled")
+        self.assertEqual(alert.source_status, "deleted")
+        self.assertIsNotNone(alert.ended_at)
 
     def test_runner_retries_transient_source_errors_and_flows_alert_to_inbox(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -172,6 +205,24 @@ class SourceAdapterTests(unittest.TestCase):
             self.assertTrue(result.success)
             self.assertEqual(result.received, 0)
             self.assertEqual(status, {"source": "nws", "stale": False, "last_checked": checked_at})
+            app.close()
+
+    def test_successful_snapshot_expires_missing_usgs_events_and_retains_history(self):
+        with tempfile.TemporaryDirectory() as directory:
+            checked_at = datetime(2026, 4, 1, tzinfo=timezone.utc)
+            app = AlertMesh(FakeEmail(), db_path=f"{directory}/alerts.sqlite3")
+            app.add_person(Person("person", "person@example.com"))
+            app.add_place(Place("home", "person", "Home", 38, -77))
+            alert = USGSAdapter(FakeTransport({})).normalize_feature({
+                "id": "us7000gone", "properties": {"time": 1775000000000, "title": "Older quake"},
+                "geometry": {"type": "Point", "coordinates": [-77, 38, 4]},
+            })
+            app.ingest(alert, checked_at=checked_at - timedelta(days=6))
+            runner = IngestionRunner(app, {"usgs": SequenceSource([[]])}, clock=lambda: checked_at)
+            runner.run_source("usgs")
+            self.assertEqual(app.alerts[alert.id].status, "expired")
+            self.assertEqual(len(app.inbox_for("person", now=checked_at + timedelta(days=89))), 1)
+            self.assertEqual(app.inbox_for("person", now=checked_at + timedelta(days=91)), [])
             app.close()
 
 

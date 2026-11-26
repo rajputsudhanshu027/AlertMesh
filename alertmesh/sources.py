@@ -55,7 +55,7 @@ class UrllibJsonTransport:
             with urlopen(request, timeout=self.timeout) as response:
                 payload = json.loads(response.read())
         except HTTPError as error:
-            retryable = error.code == 429 or 500 <= error.code < 600
+            retryable = error.code in {408, 429} or 500 <= error.code < 600
             error.close()
             raise SourceError(f"Source returned HTTP {error.code}", transient=retryable) from None
         except (URLError, TimeoutError, ConnectionError) as error:
@@ -78,20 +78,35 @@ class SourceIdentityStore:
                 source TEXT NOT NULL,
                 external_id TEXT NOT NULL,
                 alert_id TEXT NOT NULL,
+                published_at TEXT,
                 PRIMARY KEY (source, external_id)
             )
         """)
+        columns = {row[1] for row in self.connection.execute("PRAGMA table_info(source_alert_aliases)")}
+        if "published_at" not in columns:
+            self.connection.execute("ALTER TABLE source_alert_aliases ADD COLUMN published_at TEXT")
         self.connection.commit()
 
-    def resolve(self, source: str, external_id: str, references: list[str] | None = None) -> str:
+    def resolve(
+        self,
+        source: str,
+        external_id: str,
+        references: list[str] | None = None,
+        *,
+        revision_at: datetime | None = None,
+        reference_published_at: datetime | None = None,
+    ) -> tuple[str, datetime | None]:
         aliases = list(dict.fromkeys((references or []) + [external_id]))
         with self.connection:
             existing = self.connection.execute(
-                "SELECT alert_id FROM source_alert_aliases WHERE source=? AND external_id=?",
+                "SELECT alert_id,published_at FROM source_alert_aliases WHERE source=? AND external_id=?",
                 (source, external_id),
             ).fetchone()
             if existing:
-                return existing[0]
+                alert_id = existing[0]
+                published_at = self._published_at(alert_id) or _parse_datetime(existing[1]) or revision_at
+                self._fill_published_at(alert_id, published_at)
+                return alert_id, published_at
             alert_id = None
             for alias in references or []:
                 row = self.connection.execute(
@@ -104,11 +119,27 @@ class SourceIdentityStore:
             if alert_id is None:
                 root = (references or [external_id])[0]
                 alert_id = f"{source}:{root}"
+            published_at = self._published_at(alert_id) or reference_published_at or revision_at
             self.connection.executemany(
-                "INSERT OR IGNORE INTO source_alert_aliases(source,external_id,alert_id) VALUES(?,?,?)",
-                ((source, alias, alert_id) for alias in aliases),
+                "INSERT OR IGNORE INTO source_alert_aliases(source,external_id,alert_id,published_at) VALUES(?,?,?,?)",
+                ((source, alias, alert_id, published_at.isoformat() if published_at else None) for alias in aliases),
             )
-            return alert_id
+            self._fill_published_at(alert_id, published_at)
+            return alert_id, published_at
+
+    def _published_at(self, alert_id: str) -> datetime | None:
+        row = self.connection.execute(
+            "SELECT published_at FROM source_alert_aliases WHERE alert_id=? AND published_at IS NOT NULL ORDER BY rowid LIMIT 1",
+            (alert_id,),
+        ).fetchone()
+        return _parse_datetime(row[0]) if row else None
+
+    def _fill_published_at(self, alert_id: str, published_at: datetime | None) -> None:
+        if published_at is not None:
+            self.connection.execute(
+                "UPDATE source_alert_aliases SET published_at=? WHERE alert_id=? AND published_at IS NULL",
+                (published_at.isoformat(), alert_id),
+            )
 
     def close(self) -> None:
         self.connection.close()
@@ -168,11 +199,17 @@ class NWSAdapter:
         external_id = properties.get("id") or properties.get("identifier") or feature.get("id")
         if not isinstance(external_id, str) or not external_id:
             raise SourceError("NWS alert has no source identifier")
-        references = _nws_reference_ids(properties.get("references"))
-        alert_id = self.identities.resolve(self.SOURCE, external_id, references)
-        published = _parse_datetime(properties.get("sent") or properties.get("effective") or properties.get("onset"))
-        if published is None:
+        references, reference_published_at = _nws_reference_info(properties.get("references"))
+        revision_at = _parse_datetime(properties.get("sent") or properties.get("effective") or properties.get("onset"))
+        if revision_at is None:
             raise SourceError("NWS alert has no publication time")
+        alert_id, published = self.identities.resolve(
+            self.SOURCE,
+            external_id,
+            references,
+            revision_at=revision_at,
+            reference_published_at=reference_published_at,
+        )
         expected_end = _parse_datetime(properties.get("ends") or properties.get("expires"))
         message_type = str(properties.get("messageType") or "Alert").lower()
         now = self.clock()
@@ -193,8 +230,10 @@ class NWSAdapter:
             source=self.SOURCE,
             hazard="weather",
             title=str(properties.get("headline") or properties.get("event") or "Weather alert"),
-            published_at=published,
+            published_at=published or revision_at,
+            revision_at=revision_at,
             status=status,
+            source_status=str(properties.get("status") or "").lower() or None,
             severity=severity,
             expected_end=expected_end,
             ended_at=ended_at,
@@ -209,8 +248,9 @@ class USGSAdapter:
     FEED_URL = "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_week.geojson"
     SOURCE = "usgs"
 
-    def __init__(self, transport: JsonTransport) -> None:
+    def __init__(self, transport: JsonTransport, *, clock: Callable[[], datetime] = utcnow) -> None:
         self.transport = transport
+        self.clock = clock
 
     def fetch(self) -> list[Alert]:
         payload = self.transport.get_json(self.FEED_URL)
@@ -234,20 +274,27 @@ class USGSAdapter:
             longitude, latitude = float(coordinates[0]), float(coordinates[1])
             milliseconds = float(properties["time"])
             published = datetime.fromtimestamp(milliseconds / 1000, timezone.utc)
+            updated = properties.get("updated")
+            revision_at = datetime.fromtimestamp(float(updated) / 1000, timezone.utc) if updated is not None else None
         except (KeyError, TypeError, ValueError, OverflowError, OSError):
             raise SourceError("USGS event has invalid origin time or coordinates") from None
         title = properties.get("title") or properties.get("place") or f"Earthquake {external_id}"
+        source_status = str(properties.get("status") or "").lower() or None
+        deleted = source_status == "deleted"
         return Alert(
             id=f"{self.SOURCE}:{external_id}",
             source=self.SOURCE,
             hazard="earthquake",
             title=str(title),
             published_at=published,
-            status="active",
+            status="cancelled" if deleted else "active",
+            source_status=source_status,
+            ended_at=self.clock() if deleted else None,
             severity="unknown",
             geometry={"type": "Point", "coordinates": [longitude, latitude]},
             longitude=longitude,
             latitude=latitude,
+            revision_at=revision_at,
         )
 
 
@@ -317,6 +364,8 @@ class IngestionRunner:
                 logger.error("Failed to process a normalized alert from %s", source)
         if failed:
             self.app.mark_source_stale(source)
+        else:
+            self.app.expire_missing(source, {alert.id for alert in alerts}, checked_at=checked_at)
         return IngestionResult(source, failed == 0, attempts, len(alerts), ingested, failed, checked_at)
 
     def run_once(self) -> list[IngestionResult]:
@@ -333,20 +382,22 @@ class IngestionRunner:
                 return
 
 
-def _nws_reference_ids(references) -> list[str]:
+def _nws_reference_info(references) -> tuple[list[str], datetime | None]:
     if not isinstance(references, list):
-        return []
+        return [], None
     identifiers: list[str] = []
+    published_at = None
     for reference in references:
         if isinstance(reference, dict):
             identifier = reference.get("id")
+            published_at = published_at or _parse_datetime(reference.get("sent"))
         elif isinstance(reference, str):
             identifier = reference.split()[0] if reference.split() else None
         else:
             identifier = None
         if isinstance(identifier, str) and identifier:
             identifiers.append(identifier)
-    return identifiers
+    return identifiers, published_at
 
 
 def _parse_datetime(value) -> datetime | None:

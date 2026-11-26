@@ -64,6 +64,8 @@ class Alert:
     geometry: dict | None = None
     latitude: float | None = None
     longitude: float | None = None
+    revision_at: datetime | None = None
+    source_status: str | None = None
 
 
 @dataclass
@@ -239,6 +241,25 @@ class AlertMesh:
             self.last_checked[source] = checked_at or utcnow()
             self.source_stale[source] = False
             self._persist()
+
+    def expire_missing(self, source: str, present_alert_ids: set[str], *, checked_at: datetime | None = None) -> int:
+        """Expire active source Alerts omitted from a complete successful snapshot."""
+        ended_at = checked_at or utcnow()
+        count = 0
+        with self._store.transaction():
+            self._reload()
+            for alert in self.alerts.values():
+                if alert.source != source or alert.id in present_alert_ids or alert.status not in {"active", "unknown"}:
+                    continue
+                alert.status = "expired"
+                if alert.expected_end is not None and alert.expected_end <= ended_at:
+                    alert.ended_at = alert.expected_end
+                else:
+                    alert.ended_at = ended_at
+                count += 1
+            if count:
+                self._persist()
+        return count
 
     def source_status(self, source: str) -> dict:
         self.refresh()

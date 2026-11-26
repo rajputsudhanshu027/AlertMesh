@@ -1,6 +1,6 @@
 # Source ingestion
 
-AlertMesh fetches current NWS alerts and recent actual NWS alert messages, plus the USGS all earthquakes GeoJSON feed for the past seven days. The recent NWS messages let the flow process updates and cancellations while the active endpoint continues to include alerts that have been active longer than a week. Each normalized alert is sent through the same SQLite backed `AlertMesh` application flow used by the API.
+AlertMesh fetches current NWS alerts and recent actual NWS alert messages, plus the USGS all earthquakes GeoJSON feed for the past seven days. The recent NWS messages let the flow process updates and cancellations while the active endpoint continues to include alerts that have been active longer than a week. Each normalized alert carries source status, original publication time, and revision time, then is sent through the same SQLite backed `AlertMesh` application flow used by the API. NWS source ID references are persisted so revisions retain one Alert identity. Events omitted from a successful complete feed snapshot are marked expired; their Inbox entries remain for 90 days.
 
 Run one ingestion pass:
 
