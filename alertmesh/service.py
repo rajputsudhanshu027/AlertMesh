@@ -9,6 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from math import asin, cos, radians, sin, sqrt
+import os
 from typing import Protocol
 
 SEVERITY = {"unknown": 0, "minor": 1, "moderate": 2, "severe": 3, "extreme": 4}
@@ -78,53 +79,77 @@ class EmailAdapter(Protocol):
 
 
 class AlertMesh:
-    """In-memory reference application flow; inject an email adapter at runtime."""
+    """Application flow backed by SQLite; inject email and storage at startup."""
 
-    def __init__(self, email: EmailAdapter, *, history_days: int = 90) -> None:
+    def __init__(self, email: EmailAdapter, *, history_days: int = 90, db_path: str | None = None) -> None:
+        from .storage import SQLiteStore
+
         self.email = email
         self.history_days = history_days
-        self.people: dict[str, Person] = {}
-        self.places: dict[str, Place] = {}
-        self.alerts: dict[str, Alert] = {}
-        self.inbox: dict[tuple[str, str], InboxEntry] = {}
-        self.delivery_status: dict[tuple[str, str], str] = {}
-        self._emailed_revision: dict[tuple[str, str], tuple] = {}
-        self.last_checked: dict[str, datetime] = {}
-        self.source_stale: dict[str, bool] = {}
+        self._store = SQLiteStore(db_path or os.environ.get("ALERTMESH_DB_PATH", "alertmesh.sqlite3"))
+        self._reload()
+
+    def close(self) -> None:
+        """Close the storage connection after the application instance is retired."""
+        self._store.close()
+
+    def _persist(self) -> None:
+        self._store.save(self.people, self.places, self.alerts, self.inbox, self.delivery_status,
+                         self._emailed_revision, self.last_checked, self.source_stale)
+
+    def _reload(self) -> None:
+        (self.people, self.places, self.alerts, self.inbox, self.delivery_status,
+         self._emailed_revision, source_status) = self._store.load()
+        self.last_checked = {source: checked for source, (checked, _) in source_status.items() if checked is not None}
+        self.source_stale = {source: stale for source, (_, stale) in source_status.items()}
 
     def add_person(self, person: Person) -> None:
         self.people[person.id] = person
+        self._persist()
 
     def verify_person(self, person_id: str) -> None:
         self.people[person_id].verified = True
+        self._persist()
 
     def add_place(self, place: Place, active_alerts: list[Alert] | None = None) -> None:
         if place.person_id not in self.people:
             raise KeyError("Person does not exist")
         self.places[place.id] = place
+        self._persist()
         # Catch-up creates inbox entries without backdated email.
         for alert in active_alerts or []:
             self.ingest(alert, checked_at=place.added_at, notify=False)
+        self._persist()
 
     def rename_place(self, place_id: str, name: str) -> None:
         self.places[place_id].name = name
+        self._persist()
 
     def delete_place(self, place_id: str) -> None:
         self.places.pop(place_id, None)
         for entry in self.inbox.values():
             entry.place_ids.discard(place_id)
+        self._persist()
 
     def delete_person(self, person_id: str) -> None:
         self.people.pop(person_id, None)
-        place_ids = [p.id for p in self.places.values() if p.person_id == person_id]
-        for place_id in place_ids:
-            self.delete_place(place_id)
+        for place_id in [p.id for p in self.places.values() if p.person_id == person_id]:
+            self.places.pop(place_id, None)
+            for entry in self.inbox.values():
+                entry.place_ids.discard(place_id)
         for key in [key for key in self.inbox if key[0] == person_id]:
             self.inbox.pop(key, None)
             self.delivery_status.pop(key, None)
             self._emailed_revision.pop(key, None)
+        self._persist()
 
     def ingest(self, alert: Alert, *, checked_at: datetime | None = None, notify: bool = True) -> None:
+        with self._store.transaction():
+            self._reload()
+            self._ingest_current(alert, checked_at=checked_at, notify=notify)
+            self._persist()
+
+    def _ingest_current(self, alert: Alert, *, checked_at: datetime | None = None, notify: bool = True) -> None:
         previous = self.alerts.get(alert.id)
         if alert.status in {"cancelled", "expired"} and alert.ended_at is None:
             alert.ended_at = checked_at or utcnow()
@@ -153,21 +178,41 @@ class AlertMesh:
                 entry.place_ids = {pid for pid in entry.place_ids if pid in self.places}
 
     def retry_failed_deliveries(self) -> None:
-        for key, status in list(self.delivery_status.items()):
-            if status == "failed" and key in self.inbox and key[0] in self.people:
-                alert = self.alerts.get(key[1])
-                if alert:
-                    self._deliver(self.people[key[0]], alert, key, "Alert update" if key in self._emailed_revision else "New alert")
+        with self._store.transaction():
+            self._reload()
+            for key, status in list(self.delivery_status.items()):
+                if status == "failed" and key in self.inbox and key[0] in self.people:
+                    alert = self.alerts.get(key[1])
+                    if alert:
+                        self._deliver(self.people[key[0]], alert, key, "Alert update" if key in self._emailed_revision else "New alert")
+            self._persist()
 
     def mark_source_stale(self, source: str) -> None:
         self.source_stale[source] = True
+        self._persist()
 
     def source_status(self, source: str) -> dict:
         return {"source": source, "stale": self.source_stale.get(source, True), "last_checked": self.last_checked.get(source)}
 
     def inbox_for(self, person_id: str, *, now: datetime | None = None) -> list[InboxEntry]:
+        self.prune_expired(now=now)
+        return sorted((e for e in self.inbox.values() if e.person_id == person_id), key=lambda e: e.updated_at, reverse=True)
+
+    def prune_expired(self, *, now: datetime | None = None) -> int:
+        """Permanently remove terminal inbox records beyond the configured retention."""
         cutoff = (now or utcnow()) - timedelta(days=self.history_days)
-        return sorted((e for e in self.inbox.values() if e.person_id == person_id and (self.alerts[e.alert_id].ended_at or e.updated_at) >= cutoff), key=lambda e: e.updated_at, reverse=True)
+        expired = [
+            key for key, entry in self.inbox.items()
+            if self.alerts[entry.alert_id].status in {"cancelled", "expired"}
+            and (self.alerts[entry.alert_id].ended_at or entry.updated_at) < cutoff
+        ]
+        for key in expired:
+            self.inbox.pop(key, None)
+            self.delivery_status.pop(key, None)
+            self._emailed_revision.pop(key, None)
+        if expired:
+            self._persist()
+        return len(expired)
 
     def _deliver(self, person: Person, alert: Alert, key: tuple[str, str], subject: str) -> None:
         try:

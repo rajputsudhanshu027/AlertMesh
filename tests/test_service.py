@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from tempfile import TemporaryDirectory
 import unittest
 
 from alertmesh import Alert, AlertMesh, Person, Place
@@ -19,7 +20,7 @@ class FakeEmail:
 class AlertMeshFlowTests(unittest.TestCase):
     def setUp(self):
         self.mail = FakeEmail()
-        self.app = AlertMesh(self.mail)
+        self.app = AlertMesh(self.mail, db_path=":memory:")
         self.app.add_person(Person("p1", "person@example.com", verified=True))
         self.app.add_place(Place("home", "p1", "Home", 38.0, -77.0, radius_km=30))
 
@@ -77,6 +78,41 @@ class AlertMeshFlowTests(unittest.TestCase):
         self.app.delete_person("p1")
         self.assertEqual(self.app.inbox_for("p1"), [])
         self.assertNotIn("home", self.app.places)
+
+    def test_flow_persists_across_restart_without_duplicate_email(self):
+        with TemporaryDirectory() as directory:
+            path = f"{directory}/alertmesh.sqlite3"
+            app = AlertMesh(self.mail, db_path=path)
+            app.add_person(Person("persisted", "persisted@example.com", verified=True))
+            app.add_place(Place("home", "persisted", "Home", 38, -77))
+            alert = Alert("quake:restart", "usgs", "earthquake", "Restart quake", datetime.now(timezone.utc), latitude=38, longitude=-77)
+            checked_at = datetime.now(timezone.utc)
+            app.ingest(alert, checked_at=checked_at)
+            app.mark_source_stale("usgs")
+            app.close()
+
+            restarted = AlertMesh(self.mail, db_path=path)
+            self.assertTrue(restarted.source_status("usgs")["stale"])
+            restarted.ingest(alert, checked_at=checked_at)
+            self.assertEqual(len(restarted.inbox_for("persisted")), 1)
+            self.assertEqual(restarted.delivery_status[("persisted", "quake:restart")], "sent")
+            self.assertEqual(restarted.source_status("usgs")["last_checked"], checked_at)
+            self.assertFalse(restarted.source_status("usgs")["stale"])
+            self.assertEqual(len(self.mail.messages), 1)
+            restarted.close()
+
+    def test_retention_prunes_terminal_history_but_keeps_active_alerts(self):
+        now = datetime.now(timezone.utc)
+        active = Alert("usgs:active", "usgs", "earthquake", "Active", now, latitude=38, longitude=-77)
+        self.app.ingest(active)
+        ended = Alert("usgs:ended", "usgs", "earthquake", "Ended", now, latitude=38, longitude=-77)
+        self.app.ingest(ended)
+        ended.status = "expired"
+        ended.ended_at = now.replace(year=now.year - 1)
+        self.app.ingest(ended)
+
+        self.assertEqual(self.app.prune_expired(now=now), 1)
+        self.assertEqual({entry.alert_id for entry in self.app.inbox_for("p1", now=now)}, {"usgs:active"})
 
 
 if __name__ == "__main__":
