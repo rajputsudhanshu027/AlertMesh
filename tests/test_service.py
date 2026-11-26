@@ -55,6 +55,28 @@ class AlertMeshFlowTests(unittest.TestCase):
         self.app.ingest(point)
         self.assertEqual(len(self.app.inbox_for("p1")), 1)
 
+    def test_expired_alert_remains_in_history_and_source_staleness_is_visible(self):
+        now = datetime.now(timezone.utc)
+        alert = Alert("usgs:expired", "usgs", "earthquake", "Quake", now, latitude=38, longitude=-77)
+        self.app.ingest(alert, checked_at=now)
+        alert.status = "expired"
+        alert.ended_at = now
+        self.app.ingest(alert, checked_at=now)
+        self.app.mark_source_stale("usgs")
+
+        self.assertEqual([entry.alert_id for entry in self.app.inbox_for("p1")], ["usgs:expired"])
+        self.assertTrue(self.app.source_status("usgs")["stale"])
+
+    def test_deleting_place_removes_it_from_existing_inbox_and_future_matches(self):
+        alert = Alert("usgs:place-delete", "usgs", "earthquake", "Quake", datetime.now(timezone.utc), latitude=38, longitude=-77)
+        self.app.ingest(alert)
+        self.app.delete_place("home")
+
+        self.assertEqual(self.app.inbox_for("p1")[0].place_ids, set())
+        self.app.ingest(Alert(**{**alert.__dict__, "title": "Updated quake"}))
+        self.assertEqual(self.app.inbox_for("p1")[0].place_ids, set())
+        self.assertEqual(len(self.mail.messages), 1)
+
     def test_active_alert_catchup_has_no_backdated_email(self):
         alert = Alert("usgs:old", "usgs", "earthquake", "Old quake", datetime.now(timezone.utc), latitude=38, longitude=-77)
         self.app.add_place(Place("cabin", "p1", "Cabin", 38, -77), [alert])
