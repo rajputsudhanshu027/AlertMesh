@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
 from urllib.error import HTTPError
 
-from alertmesh import AlertMesh, Person, Place
+from alertmesh import Alert, AlertMesh, Person, Place
 from alertmesh.sources import (
     IngestionRunner,
     NWSAdapter,

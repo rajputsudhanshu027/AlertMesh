@@ -192,18 +192,27 @@ class AlertMesh:
 
     def ingest(self, alert: Alert, *, checked_at: datetime | None = None, notify: bool = True) -> bool:
         started = time.perf_counter()
+        delivery_metrics: list[tuple[str, int]] = []
         try:
             with self._store.transaction():
                 self._reload()
                 duplicate = self.alerts.get(alert.id) == alert
-                self._ingest_current(alert, checked_at=checked_at, notify=notify)
+                self._ingest_current(alert, checked_at=checked_at, notify=notify, delivery_metrics=delivery_metrics)
                 self._persist()
-                return duplicate
+            self._record_metrics(delivery_metrics)
+            return duplicate
         finally:
             self.metrics.increment("alert_processing_ms_total", (time.perf_counter() - started) * 1000)
             self.metrics.increment("alert_processing_count")
 
-    def _ingest_current(self, alert: Alert, *, checked_at: datetime | None = None, notify: bool = True) -> None:
+    def _ingest_current(
+        self,
+        alert: Alert,
+        *,
+        checked_at: datetime | None = None,
+        notify: bool = True,
+        delivery_metrics: list[tuple[str, int]] | None = None,
+    ) -> None:
         previous = self.alerts.get(alert.id)
         if alert.status in {"cancelled", "expired"} and alert.ended_at is None:
             alert.ended_at = checked_at or utcnow()
@@ -225,20 +234,24 @@ class AlertMesh:
                     sent_revision = self._emailed_revision.get(key)
                     should_send = sent_revision is None or (previous is not None and revision != sent_revision)
                     if should_send:
-                        self._deliver(person, alert, key, "New alert" if sent_revision is None else "Alert update")
+                        if delivery_metrics is None:
+                            raise RuntimeError("Delivery metrics must be recorded after the application transaction")
+                        self._deliver(person, alert, key, "New alert" if sent_revision is None else "Alert update", delivery_metrics)
             elif entry:
                 # Preserve historical match, but remove deleted/disabled places from current view.
                 entry.place_ids = {pid for pid in entry.place_ids if pid in self.places}
 
     def retry_failed_deliveries(self) -> None:
+        delivery_metrics: list[tuple[str, int]] = []
         with self._store.transaction():
             self._reload()
             for key, status in list(self.delivery_status.items()):
                 if status == "failed" and key in self.inbox and key[0] in self.people:
                     alert = self.alerts.get(key[1])
                     if alert:
-                        self._deliver(self.people[key[0]], alert, key, "Alert update" if key in self._emailed_revision else "New alert")
+                        self._deliver(self.people[key[0]], alert, key, "Alert update" if key in self._emailed_revision else "New alert", delivery_metrics)
             self._persist()
+        self._record_metrics(delivery_metrics)
 
     def mark_source_stale(self, source: str) -> None:
         with self._store.transaction():
@@ -298,22 +311,33 @@ class AlertMesh:
             self._persist()
         return len(expired)
 
-    def _deliver(self, person: Person, alert: Alert, key: tuple[str, str], subject: str) -> None:
+    def _deliver(
+        self,
+        person: Person,
+        alert: Alert,
+        key: tuple[str, str],
+        subject: str,
+        metric_updates: list[tuple[str, int]],
+    ) -> None:
         retry = self.delivery_status.get(key) == "failed"
-        self.metrics.increment("delivery.attempts")
+        metric_updates.append(("delivery.attempts", 1))
         if retry:
-            self.metrics.increment("delivery.retries")
+            metric_updates.append(("delivery.retries", 1))
         try:
             places = ", ".join(sorted(self.places[i].name for i in self.inbox[key].place_ids if i in self.places))
             self.email.send(person.email, f"{subject}: {alert.title}", f"{alert.title}\nAffected places: {places}")
             self.delivery_status[key] = "sent"
             self._emailed_revision[key] = self._material_revision(alert)
-            self.metrics.increment("delivery.sent")
+            metric_updates.append(("delivery.sent", 1))
             if retry:
-                self.metrics.increment("delivery.retry_successes")
+                metric_updates.append(("delivery.retry_successes", 1))
         except Exception:
             self.delivery_status[key] = "failed"
-            self.metrics.increment("delivery.failed")
+            metric_updates.append(("delivery.failed", 1))
+
+    def _record_metrics(self, updates: list[tuple[str, int]]) -> None:
+        for name, amount in updates:
+            self.metrics.increment(name, amount)
 
     @staticmethod
     def _material_revision(alert: Alert) -> tuple:
