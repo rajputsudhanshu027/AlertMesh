@@ -57,6 +57,7 @@ class Alert:
     status: str = "active"
     severity: str = "unknown"
     expected_end: datetime | None = None
+    ended_at: datetime | None = None
     instructions: str = ""
     # NWS-style geometry as GeoJSON coordinates; use point geometry for quakes.
     geometry: dict | None = None
@@ -125,6 +126,8 @@ class AlertMesh:
 
     def ingest(self, alert: Alert, *, checked_at: datetime | None = None, notify: bool = True) -> None:
         previous = self.alerts.get(alert.id)
+        if alert.status in {"cancelled", "expired"} and alert.ended_at is None:
+            alert.ended_at = checked_at or utcnow()
         self.alerts[alert.id] = alert
         self.last_checked[alert.source] = checked_at or utcnow()
         self.source_stale[alert.source] = False
@@ -164,7 +167,7 @@ class AlertMesh:
 
     def inbox_for(self, person_id: str, *, now: datetime | None = None) -> list[InboxEntry]:
         cutoff = (now or utcnow()) - timedelta(days=self.history_days)
-        return sorted((e for e in self.inbox.values() if e.person_id == person_id and e.updated_at >= cutoff), key=lambda e: e.updated_at, reverse=True)
+        return sorted((e for e in self.inbox.values() if e.person_id == person_id and (self.alerts[e.alert_id].ended_at or e.updated_at) >= cutoff), key=lambda e: e.updated_at, reverse=True)
 
     def _deliver(self, person: Person, alert: Alert, key: tuple[str, str], subject: str) -> None:
         try:
@@ -192,7 +195,10 @@ class AlertMesh:
             # Keep existing inbox history, do not create a new match for a terminal alert.
             return False
         if alert.hazard == "weather":
-            return place.weather_enabled and (cls._point_in_geometry(place.latitude, place.longitude, alert.geometry) if alert.geometry else False)
+            if not place.weather_enabled or not (cls._point_in_geometry(place.latitude, place.longitude, alert.geometry) if alert.geometry else False):
+                return False
+            # Unknown severity remains visible; known severity honors each place's threshold.
+            return alert.severity == "unknown" or (alert.severity in SEVERITY and SEVERITY[alert.severity] >= SEVERITY[place.minimum_severity])
         if alert.hazard == "earthquake":
             return place.earthquake_enabled and alert.latitude is not None and alert.longitude is not None and _distance_km(place.latitude, place.longitude, alert.latitude, alert.longitude) <= place.radius_km
         return False

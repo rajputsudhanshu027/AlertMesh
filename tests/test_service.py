@@ -40,6 +40,19 @@ class AlertMeshFlowTests(unittest.TestCase):
         self.assertEqual(self.app.inbox_for("p1")[0].place_ids, {"home"})
         self.assertEqual(self.mail.messages, [])
 
+    def test_weather_below_place_minimum_severity_is_not_matched(self):
+        area = {"type": "Polygon", "coordinates": [[[-78, 37], [-76, 37], [-76, 39], [-78, 39], [-78, 37]]]}
+        alert = Alert("nws:minor", "nws", "weather", "Minor alert", datetime.now(timezone.utc), severity="minor", geometry=area)
+        self.app.ingest(alert)
+        self.assertEqual(self.app.inbox_for("p1"), [])
+
+    def test_canceled_alert_remains_in_history_for_ninety_days(self):
+        point = Alert("usgs:done", "usgs", "earthquake", "Quake", datetime.now(timezone.utc), latitude=38, longitude=-77)
+        self.app.ingest(point)
+        point.status = "cancelled"
+        self.app.ingest(point)
+        self.assertEqual(len(self.app.inbox_for("p1")), 1)
+
     def test_active_alert_catchup_has_no_backdated_email(self):
         alert = Alert("usgs:old", "usgs", "earthquake", "Old quake", datetime.now(timezone.utc), latitude=38, longitude=-77)
         self.app.add_place(Place("cabin", "p1", "Cabin", 38, -77), [alert])
