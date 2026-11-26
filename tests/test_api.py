@@ -15,6 +15,7 @@ class FakeMailer(VerificationMailer):
         self.sent = []
         self.alerts = []
         self.fail_verification = False
+        self.fail_alerts = False
 
     def send_verification(self, email, token):
         if self.fail_verification:
@@ -22,6 +23,8 @@ class FakeMailer(VerificationMailer):
         self.sent.append((email, token))
 
     def send(self, to, subject, body):
+        if self.fail_alerts:
+            raise OSError("alert email unavailable")
         self.alerts.append((to, subject, body))
 
 
@@ -131,6 +134,18 @@ class APITests(unittest.TestCase):
         self.assertIn('name="weather_enabled"', page)
         self.assertIn('name="earthquake_enabled"', page)
         self.assertIn('name="minimum_severity"', page)
+        self.assertIn('id="inbox-list"', page)
+        self.assertIn('id="inbox-detail"', page)
+        self.assertIn('id="account-freshness"', page)
+        self.assertIn('data-inbox-alert=', page)
+        self.assertIn("alert.expected_end", page)
+        self.assertIn("alert.instructions", page)
+        self.assertIn("alert.delivery?.status", page)
+        self.assertIn("Loading your Alerts and source status", page)
+        self.assertIn("Your Inbox is unavailable", page)
+        self.assertIn('not_sent: { label: "Not sent", className: "not_sent" }', page)
+        self.assertIn('pending: { label: "Pending", className: "pending" }', page)
+        self.assertIn('className: "not_sent"', page)
         self.assertIn('id="place-search-form"', page)
         self.assertIn('data-edit-place=', page)
         self.assertIn('data-delete-place=', page)
@@ -293,6 +308,46 @@ class APITests(unittest.TestCase):
         source.ingest(Alert("usgs:after-place-delete", "usgs", "earthquake", "Another quake", self.now, latitude=38, longitude=-77))
         source.close()
         self.assertEqual(len(self.request("GET", "/api/inbox", token=token)[1]["alerts"]), 1)
+
+    def test_inbox_exposes_matching_places_terminal_state_freshness_and_delivery(self):
+        token = self.register_and_login()
+        for name in ("Home", "Work"):
+            self.assertEqual(self.request("POST", "/api/places", {"name": name, "latitude": 38, "longitude": -77}, token)[0], 201)
+        source = AlertMesh(self.mailer, db_path=self.app.database)
+        quake = Alert("usgs:browser-inbox", "usgs", "earthquake", "Nearby quake", self.now, expected_end=self.now + timedelta(hours=2), instructions="Stay clear of damaged structures.", latitude=38, longitude=-77)
+        source.ingest(quake, checked_at=self.now)
+        quake.status = "cancelled"
+        source.ingest(quake, checked_at=self.now)
+        expired = Alert("usgs:browser-expired", "usgs", "earthquake", "Older quake", self.now, latitude=38, longitude=-77)
+        source.ingest(expired, checked_at=self.now)
+        expired.status = "expired"
+        expired.ended_at = self.now
+        source.ingest(expired, checked_at=self.now)
+
+        weather_area = {"type": "Polygon", "coordinates": [[[-78, 37], [-76, 37], [-76, 39], [-78, 39], [-78, 37]]]}
+        source.ingest(Alert("nws:browser-inbox", "nws", "weather", "Unclassified warning", self.now, severity="unknown", geometry=weather_area), checked_at=self.now)
+        self.mailer.fail_alerts = True
+        source.ingest(Alert("usgs:browser-failed", "usgs", "earthquake", "Failed delivery quake", self.now, latitude=38, longitude=-77), checked_at=self.now)
+        source.mark_source_stale("usgs")
+        source.close()
+
+        status, inbox = self.request("GET", "/api/inbox", token=token)
+        self.assertEqual(status, 200)
+        entries = {alert["id"]: alert for alert in inbox["alerts"]}
+        self.assertEqual(sum(alert["id"] == "usgs:browser-inbox" for alert in inbox["alerts"]), 1)
+        self.assertEqual(set(entries["usgs:browser-inbox"]["places"][i]["name"] for i in range(2)), {"Home", "Work"})
+        self.assertEqual(entries["usgs:browser-inbox"]["status"], "cancelled")
+        self.assertEqual(entries["usgs:browser-inbox"]["instructions"], "Stay clear of damaged structures.")
+        self.assertEqual(entries["usgs:browser-inbox"]["expected_end"], (self.now + timedelta(hours=2)).isoformat())
+        self.assertEqual(entries["usgs:browser-inbox"]["delivery"]["status"], "sent")
+        self.assertEqual(entries["usgs:browser-expired"]["status"], "expired")
+        self.assertEqual(entries["nws:browser-inbox"]["delivery"]["status"], "not_sent")
+        self.assertEqual(entries["usgs:browser-failed"]["delivery"]["status"], "failed")
+        self.assertEqual(entries["usgs:browser-failed"]["status"], "active")
+        sources = {source["source"]: source for source in inbox["sources"]}
+        self.assertTrue(sources["usgs"]["stale"])
+        self.assertFalse(sources["nws"]["stale"])
+        self.assertEqual(sources["usgs"]["last_checked"], self.now.isoformat())
 
     def test_verification_token_expires(self):
         self.request("POST", "/api/register", {"email": "late@example.com", "password": "a-strong-password"})

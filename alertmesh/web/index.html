@@ -216,6 +216,45 @@
     .inbox-summary li strong { color: var(--deep); font-size: 11px; }
     .inbox-summary li span { color: var(--muted); font-size: 11px; line-height: 1.45; }
     .attribution { margin: 13px 0 0; }
+    .account-error { max-width: 600px; margin: 20px auto; padding: 22px; border: 1px solid #e3b5aa; border-radius: 12px; background: #fff7f3; color: #713c33; }
+    .account-error h2 { margin-bottom: 9px; color: #713c33; font-size: 20px; }
+    .account-error p { color: #713c33; font-size: 13px; line-height: 1.5; }
+    .account-freshness { margin: 22px 0 26px; padding: 15px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+    .account-freshness h3 { margin: 0 0 11px; color: var(--muted); font-size: 12px; font-weight: 680; }
+    .freshness-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px 22px; }
+    .freshness-item { display: grid; grid-template-columns: 8px minmax(0, 1fr) auto; align-items: center; gap: 9px; }
+    .freshness-item > div { display: grid; gap: 3px; }
+    .freshness-item strong { color: var(--ink); font-size: 12px; }
+    .freshness-item span:not(.source-signal), .freshness-item time { color: var(--muted); font-size: 12px; }
+    .freshness-item time { text-align: right; }
+    .account-inbox { margin-bottom: 30px; }
+    .inbox-heading { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 12px; }
+    .inbox-heading h3 { margin: 0 0 4px; color: var(--deep); font-size: 17px; }
+    .inbox-heading span { color: var(--muted); font-size: 12px; }
+    .inbox-grid { display: grid; grid-template-columns: minmax(260px, .78fr) minmax(0, 1.22fr); gap: 14px; align-items: start; }
+    .inbox-list { display: grid; max-height: 510px; overflow-y: auto; border-top: 1px solid var(--line); }
+    .inbox-entry { display: grid; gap: 6px; width: 100%; padding: 12px 10px; border: 0; border-bottom: 1px solid var(--line); color: var(--ink); background: transparent; text-align: left; cursor: pointer; }
+    .inbox-entry:hover { background: #f4f7f3; }
+    .inbox-entry[aria-pressed="true"] { background: #eaf2ed; }
+    .inbox-entry strong { color: var(--deep); font-size: 12px; line-height: 1.4; }
+    .inbox-entry > span:not(.inbox-entry-meta) { color: var(--muted); font-size: 12px; line-height: 1.45; }
+    .inbox-entry time { color: var(--quiet); font-size: 12px; }
+    .inbox-entry-meta { display: flex; gap: 5px; align-items: center; flex-wrap: wrap; }
+    .tag.active-tag { background: #e3eee7; color: #315f4e; }
+    .tag.terminal-tag { background: #edf0ed; color: #52635e; }
+    .inbox-empty { padding: 18px 8px; }
+    .inbox-empty h4 { margin: 0 0 6px; color: var(--deep); font-size: 14px; }
+    .inbox-empty p { margin-bottom: 12px; color: var(--muted); font-size: 12px; line-height: 1.5; }
+    .inbox-detail { min-width: 0; padding: 18px; border: 1px solid var(--line); border-radius: 10px; background: #f8faf6; }
+    .inbox-detail-heading h3 { margin: 8px 0 5px; color: var(--deep); font-family: Georgia, "Times New Roman", serif; font-size: 23px; font-weight: 500; line-height: 1.2; }
+    .inbox-detail-heading > p { margin: 0; color: var(--muted); font-size: 12px; }
+    .inbox-detail-section { margin-top: 17px; }
+    .inbox-detail-section h4 { margin: 0 0 5px; color: var(--muted); font-size: 11px; }
+    .inbox-detail-section p { margin: 0; color: var(--ink); font-size: 12px; line-height: 1.55; white-space: pre-line; }
+    .alert-facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 15px; margin: 18px 0 0; padding-top: 14px; border-top: 1px solid var(--line); }
+    .alert-facts dt { margin-bottom: 4px; color: var(--muted); font-size: 11px; }
+    .alert-facts dd { margin: 0; color: var(--ink); font-size: 12px; line-height: 1.45; }
+    .delivery-state.pending::before { background: #9b8a57; }
 
     @media (max-width: 1100px) {
       .workspace { grid-template-columns: minmax(170px, 205px) minmax(320px, 1fr); }
@@ -261,6 +300,9 @@
       .account-columns { grid-template-columns: 1fr; gap: 24px; }
       .places-layout { grid-template-columns: 1fr; gap: 24px; }
       .inbox-summary { padding: 20px 0 0; border-top: 1px solid var(--line); border-left: 0; }
+      .inbox-grid { grid-template-columns: 1fr; }
+      .inbox-list { max-height: 330px; }
+      .freshness-list { grid-template-columns: 1fr; }
       .managed-place { align-items: flex-start; flex-direction: column; }
       .place-actions { width: 100%; }
       .place-actions .action-button { flex: 1; }
@@ -358,7 +400,7 @@
 
   <script>
     (() => {
-      const state = { data: null, filter: "all", selectedId: null, selectedPlace: null, authMode: "login", account: null, searchResults: [], selectedGeocode: null, editingPlaceId: null, savingPlace: false, placeNotice: "", placeDraft: null };
+      const state = { data: null, filter: "all", selectedId: null, selectedPlace: null, authMode: "login", account: null, selectedInboxId: null, searchResults: [], selectedGeocode: null, editingPlaceId: null, savingPlace: false, placeNotice: "", placeDraft: null };
       const appState = document.getElementById("app-state");
       const dashboard = document.getElementById("dashboard");
       const authPanel = document.getElementById("auth-panel");
@@ -376,6 +418,11 @@
         return new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" }).format(new Date(value));
       };
 
+      const formatDateTime = (value) => {
+        if (!value) return "Not checked yet";
+        return new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
+      };
+
       const relativeTime = (value) => {
         if (!value) return "Time unavailable";
         const minutes = Math.max(0, Math.round((Date.now() - new Date(value).getTime()) / 60000));
@@ -387,6 +434,9 @@
 
       const sourceName = source => sourceLabels[source] || source.toUpperCase();
       const statusLabel = status => ({ active: "Active", expired: "Expired", cancelled: "Canceled", unknown: "Status unknown" }[status] || status);
+      const hazardLabel = hazard => hazard === "weather" ? "Weather" : "Earthquake";
+      const hazardClass = hazard => hazard === "weather" ? "weather" : "quake";
+      const alertStateClass = status => status === "active" ? "active-tag" : "terminal-tag";
       const severityLabel = severity => severity === "unknown" ? "Severity unknown" : `${severity[0].toUpperCase()}${severity.slice(1)}`;
 
       function showAuth(message = "") {
@@ -416,36 +466,85 @@
       }
 
       async function loadAccount() {
-        const response = await fetch("/api/me", { credentials: "same-origin", cache: "no-store" });
-        if (response.status === 401) { loadDemo(); return; }
-        if (!response.ok) throw new Error("Your account could not be loaded. Please try again.");
-        const person = await response.json();
-        const [placesResponse, inboxResponse] = await Promise.all([
-          fetch("/api/places", { credentials: "same-origin", cache: "no-store" }),
-          fetch("/api/inbox", { credentials: "same-origin", cache: "no-store" })
-        ]);
-        if (!placesResponse.ok || !inboxResponse.ok) throw new Error("Your account data could not be loaded. Please sign in again.");
-        const places = (await placesResponse.json()).places;
-        const inbox = (await inboxResponse.json()).alerts;
-        state.account = { person, places, inbox };
-        authPanel.hidden = true; dashboard.hidden = true; accountPanel.hidden = false;
+        appState.hidden = false; appState.className = "loading"; appState.textContent = "Loading your Alerts and source status…";
+        accountPanel.hidden = true; dashboard.hidden = true; authPanel.hidden = true;
+        try {
+          const response = await fetch("/api/me", { credentials: "same-origin", cache: "no-store" });
+          if (response.status === 401) { loadDemo(); return; }
+          if (!response.ok) throw new Error("Your account could not be loaded.");
+          const person = await response.json();
+          const [placesResponse, inboxResponse] = await Promise.all([
+            fetch("/api/places", { credentials: "same-origin", cache: "no-store" }),
+            fetch("/api/inbox", { credentials: "same-origin", cache: "no-store" })
+          ]);
+          if (placesResponse.status === 401 || inboxResponse.status === 401) { showAuth("Your session expired. Sign in again to see your Alerts."); return; }
+          if (!placesResponse.ok || !inboxResponse.ok) throw new Error("Your Alerts or Places could not be loaded.");
+          const places = (await placesResponse.json()).places;
+          const inboxData = await inboxResponse.json();
+          state.account = { person, places, inbox: inboxData.alerts, sources: inboxData.sources };
+          if (!state.account.inbox.some(alert => alert.id === state.selectedInboxId)) state.selectedInboxId = state.account.inbox[0]?.id || null;
+          appState.hidden = true; authPanel.hidden = true; dashboard.hidden = true; accountPanel.hidden = false;
+          document.getElementById("reset-demo").hidden = true;
+          document.getElementById("account-access").hidden = true;
+          document.getElementById("sign-out").hidden = false;
+          renderAccount();
+        } catch (error) {
+          showAccountError(`${error.message} Check your connection, then retry.`);
+        }
+      }
+
+      function showAccountError(message) {
+        appState.hidden = true; authPanel.hidden = true; dashboard.hidden = true; accountPanel.hidden = false;
         document.getElementById("reset-demo").hidden = true;
         document.getElementById("account-access").hidden = true;
         document.getElementById("sign-out").hidden = false;
-        renderAccount();
+        accountPanel.innerHTML = `<section class="account-error" role="alert"><h2>Your Inbox is unavailable</h2><p>${escapeHtml(message)}</p><p>Retry to load your Alerts and source checks. You can also return to the local demo.</p><div class="place-actions"><button class="action-button primary" id="retry-account" type="button">Retry</button><button class="action-button" id="account-error-demo" type="button">Return to local demo</button></div></section>`;
+        document.getElementById("retry-account").addEventListener("click", loadAccount);
+        document.getElementById("account-error-demo").addEventListener("click", loadDemo);
       }
 
       function renderAccount() {
         const { person, places, inbox } = state.account;
-        accountPanel.innerHTML = `<div class="account-heading"><div><h2 id="account-title">Your monitored Places</h2><p>${escapeHtml(person.email)}</p></div><span class="account-stat">${places.length} ${places.length === 1 ? "Place" : "Places"} · ${inbox.length} Inbox ${inbox.length === 1 ? "entry" : "entries"}</span></div>
-          <div class="places-layout"><section class="place-manager" aria-labelledby="places-title"><h3 id="places-title">Find and manage Places</h3><p class="section-help">Search for a U.S. address or city. Only results in the contiguous United States can be added.</p>
+        accountPanel.innerHTML = `<div class="account-heading"><div><h2 id="account-title">Your Alerts</h2><p>${escapeHtml(person.email)}</p></div><span class="account-stat">${places.length} ${places.length === 1 ? "Place" : "Places"} · ${inbox.length} Inbox ${inbox.length === 1 ? "entry" : "entries"}</span></div>
+          <section id="account-freshness" class="account-freshness" aria-labelledby="freshness-title"><h3 id="freshness-title">Source freshness</h3>${state.account.sources.length ? `<div class="freshness-list">${state.account.sources.map(source => `<div class="freshness-item"><span class="source-signal ${source.stale ? "stale" : ""}" aria-hidden="true"></span><div><strong>${escapeHtml(sourceName(source.source))}</strong><span>${source.stale ? "Data may be delayed" : "Data is current"}</span></div><time datetime="${escapeHtml(source.last_checked || "")}">Last checked ${escapeHtml(formatDateTime(source.last_checked))}</time></div>`).join("")}</div>` : `<p class="account-empty">No source checks have been recorded. Freshness will appear after the next feed check.</p>`}</section>
+          <section class="account-inbox" aria-labelledby="inbox-title"><div class="inbox-heading"><div><h3 id="inbox-title">Inbox</h3><span>${inbox.length} ${inbox.length === 1 ? "entry" : "entries"} · one entry per Alert</span></div></div><div class="inbox-grid"><div id="inbox-list" class="inbox-list" role="group" aria-label="Matching Alerts"></div><article id="inbox-detail" class="inbox-detail" aria-live="polite"></article></div></section>
+          <section class="place-manager" aria-labelledby="places-title"><h3 id="places-title">Find and manage Places</h3><p class="section-help">Search for a U.S. address or city. Only results in the contiguous United States can be added.</p>
             <form id="place-search-form" class="place-search"><label for="place-query">Address or city</label><div class="search-controls"><input id="place-query" name="q" type="search" maxlength="200" placeholder="e.g. Denver, Colorado" required><button class="action-button primary" type="submit">Search</button></div></form>
             <p id="place-search-status" class="form-status" role="status" aria-live="polite"></p><div id="place-results" class="place-results" role="group" aria-label="Address search results"></div>
             <div id="place-editor"></div>
             <div class="places-list-heading"><h3>Your Places</h3><span>${places.length} saved</span></div>
             <div id="managed-places" class="managed-places">${places.length ? places.map(place => `<article class="managed-place"><div class="managed-place-copy"><strong>${escapeHtml(place.name)}</strong><span>${Number(place.latitude).toFixed(3)}, ${Number(place.longitude).toFixed(3)} · ${escapeHtml(String(place.radius_km))} km radius</span><span>${place.weather_enabled ? `Weather: ${escapeHtml(place.minimum_severity)}+` : "Weather off"} · ${place.earthquake_enabled ? "Earthquakes on" : "Earthquakes off"}</span></div><div class="place-actions"><button class="action-button" type="button" data-edit-place="${escapeHtml(place.id)}">Edit</button><button class="action-button danger" type="button" data-delete-place="${escapeHtml(place.id)}">Remove</button></div></article>`).join("") : `<p class="account-empty">No Places saved yet. Search for a city or address above to add your first Place.</p>`}</div><p id="place-action-status" class="form-status" role="status" aria-live="polite">${escapeHtml(state.placeNotice)}</p><p class="field-help">New Places default to 25 km, weather and earthquake alerts on, and moderate minimum weather severity.</p><p class="attribution">Geocoding by ${escapeHtml("© OpenStreetMap contributors")}</p>
-          </section><section class="inbox-summary" aria-labelledby="inbox-title"><h3 id="inbox-title">Your Inbox</h3>${inbox.length ? `<ul>${inbox.map(alert => `<li><strong>${escapeHtml(alert.title)}</strong><span>${escapeHtml(alert.status)} · ${escapeHtml(alert.places.map(place => place.name).join(", ") || "Place removed")}</span></li>`).join("")}</ul>` : `<p class="account-empty">No matching Alerts yet. Alerts will appear here when they match your Places.</p>`}</section></div><p class="demo-note">Your session is stored in a protected browser cookie. Sign out to close this account view.</p>`;
+          </section><p class="demo-note">Your session is stored in a protected browser cookie. Sign out to close this account view.</p>`;
         renderPlaceEditor();
+        renderInbox();
+      }
+
+      function renderInbox() {
+        const list = document.getElementById("inbox-list");
+        const detail = document.getElementById("inbox-detail");
+        const inbox = state.account.inbox;
+        if (!inbox.length) {
+          list.innerHTML = `<div class="account-empty inbox-empty"><h4>No matching Alerts yet</h4><p>Add a Place or adjust its preferences. Matching Alerts will appear here.</p><button class="action-button" type="button" data-focus-place>Find a Place</button></div>`;
+          detail.innerHTML = `<p class="account-empty">Alert details will appear here when an Alert matches a Place.</p>`;
+          return;
+        }
+        list.innerHTML = inbox.map(alert => `<button class="inbox-entry" type="button" data-inbox-alert="${escapeHtml(alert.id)}" aria-pressed="${alert.id === state.selectedInboxId}"><span class="inbox-entry-meta"><span class="tag ${hazardClass(alert.hazard)}">${escapeHtml(hazardLabel(alert.hazard))}</span><span class="tag ${alertStateClass(alert.status)}">${escapeHtml(statusLabel(alert.status))}</span></span><strong>${escapeHtml(alert.title)}</strong><span>${escapeHtml(severityLabel(alert.severity))} · ${escapeHtml(alert.places.map(place => place.name).join(", ") || "No current Place match")}</span><time datetime="${escapeHtml(alert.published_at)}">${escapeHtml(formatTime(alert.published_at))}</time></button>`).join("");
+        renderInboxDetail(inbox.find(alert => alert.id === state.selectedInboxId));
+      }
+
+      function renderInboxDetail(alert) {
+        const detail = document.getElementById("inbox-detail");
+        if (!alert) { detail.innerHTML = `<p class="account-empty">Choose an Inbox entry to review its status and details.</p>`; return; }
+        const delivery = {
+          not_sent: { label: "Not sent", className: "not_sent" },
+          pending: { label: "Pending", className: "pending" },
+          sent: { label: "Sent", className: "sent" },
+          failed: { label: "Failed", className: "failed" }
+        }[alert.delivery?.status] || { label: "Unavailable", className: "not_sent" };
+        const source = state.account.sources.find(item => item.source === alert.source);
+        const sourceSummary = source ? `${source.stale ? "Data may be delayed" : "Data is current"} · checked ${formatDateTime(source.last_checked)}` : "No source check recorded";
+        const expectedEnd = alert.expected_end ? formatDateTime(alert.expected_end) : "Not provided";
+        detail.innerHTML = `<div class="inbox-detail-heading"><div class="inbox-entry-meta"><span class="tag ${alert.source === "nws" ? "weather" : "quake"}">${escapeHtml(sourceName(alert.source))}</span><span class="tag ${alertStateClass(alert.status)}">${escapeHtml(statusLabel(alert.status))}</span></div><h3>${escapeHtml(alert.title)}</h3><p>${escapeHtml(hazardLabel(alert.hazard))} · ${escapeHtml(severityLabel(alert.severity))}</p></div><section class="inbox-detail-section"><h4>Matching Places</h4><p>${escapeHtml(alert.places.map(place => place.name).join(", ") || "No current matching Places")}</p></section><section class="inbox-detail-section"><h4>Instructions</h4><p>${escapeHtml(alert.instructions || "No additional instructions were provided by the source.")}</p></section><dl class="alert-facts"><div><dt>Expected end</dt><dd>${escapeHtml(expectedEnd)}</dd></div><div><dt>Alert status</dt><dd>${escapeHtml(statusLabel(alert.status))}</dd></div><div><dt>Source status</dt><dd>${escapeHtml(sourceSummary)}</dd></div><div><dt>Email delivery</dt><dd><span class="delivery-state ${delivery.className}">${escapeHtml(delivery.label)}</span></dd></div><div><dt>Published</dt><dd>${escapeHtml(formatDateTime(alert.published_at))}</dd></div></dl>`;
       }
 
       function renderPlaceResults() {
@@ -489,7 +588,7 @@
           status.textContent = result.results.length ? `${result.results.length} place${result.results.length === 1 ? "" : "s"} found. Choose one to continue.` : "No contiguous-U.S. places matched. Try a nearby city or a fuller address.";
         } catch (error) {
           state.searchResults = []; renderPlaceResults();
-          status.textContent = error.message.includes("unavailable") ? "Address search is temporarily unavailable. Check your connection and try again." : error.message;
+          status.textContent = error instanceof TypeError || error.message.includes("unavailable") ? "Address search is temporarily unavailable. Check your connection and try again." : error.message;
         } finally { button.disabled = false; }
       }
 
@@ -509,7 +608,7 @@
           await loadAccount();
         } catch (error) {
           state.savingPlace = false;
-          status.textContent = error.message;
+          status.textContent = error instanceof TypeError ? "The Place could not be saved. Check your connection and retry." : error.message;
           renderPlaceEditor();
           return;
         }
@@ -526,7 +625,7 @@
           state.placeNotice = `${place.name} removed. Its name has been cleared from Inbox match explanations.`;
           state.editingPlaceId = null; state.selectedGeocode = null; state.placeDraft = null;
           await loadAccount();
-        } catch (error) { status.textContent = error.message; }
+        } catch (error) { status.textContent = error instanceof TypeError ? `Could not remove ${place.name}. Check your connection and retry.` : error.message; }
       }
 
       accountPanel.addEventListener("submit", event => {
@@ -539,6 +638,13 @@
         }
       });
       accountPanel.addEventListener("click", event => {
+        if (event.target.closest("[data-focus-place]")) { document.getElementById("place-query").focus(); document.getElementById("place-query").scrollIntoView({ behavior: "smooth", block: "center" }); return; }
+        const alertButton = event.target.closest("[data-inbox-alert]");
+        if (alertButton) {
+          state.selectedInboxId = alertButton.dataset.inboxAlert; renderInbox();
+          [...accountPanel.querySelectorAll("[data-inbox-alert]")].find(button => button.dataset.inboxAlert === state.selectedInboxId)?.focus();
+          return;
+        }
         const resultButton = event.target.closest("[data-place-result]");
         if (resultButton) {
           state.selectedGeocode = state.searchResults[Number(resultButton.dataset.placeResult)];
@@ -584,6 +690,7 @@
       document.getElementById("sign-out").addEventListener("click", async () => {
         try {
           await authRequest("/api/logout", {});
+          state.account = null; state.selectedInboxId = null; state.searchResults = []; state.selectedGeocode = null; state.editingPlaceId = null; state.placeNotice = "";
           await loadDemo();
         } catch (error) {
           authMessage.textContent = `Sign-out could not be completed: ${error.message}`;
