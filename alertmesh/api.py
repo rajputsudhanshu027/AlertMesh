@@ -16,6 +16,7 @@ import smtplib
 import sqlite3
 import sys
 import uuid
+from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from email.message import EmailMessage
 from http import HTTPStatus
@@ -80,11 +81,16 @@ class AlertMeshAPI:
         start_response(f"{status} {HTTPStatus(status).phrase}", [("Content-Type", "application/json; charset=utf-8"), ("Content-Length", str(len(encoded))), ("Cache-Control", "no-store")])
         return [encoded]
 
+    @contextmanager
     def _connect(self):
         connection = sqlite3.connect(self.database, timeout=10)
         connection.row_factory = sqlite3.Row
         connection.execute("PRAGMA foreign_keys = ON")
-        return connection
+        try:
+            with connection:
+                yield connection
+        finally:
+            connection.close()
 
     def _initialize(self):
         with self._connect() as db:
@@ -307,7 +313,7 @@ class AlertMeshAPI:
                        d.attempted_at
                 FROM api_inbox_entries i JOIN api_alerts a ON a.id=i.alert_id
                 LEFT JOIN api_email_deliveries d ON d.person_id=i.person_id AND d.alert_id=i.alert_id
-                WHERE i.person_id=? AND COALESCE(a.ended_at, i.created_at)>=?
+                WHERE i.person_id=? AND (a.ended_at IS NULL OR a.ended_at>=?)
                 ORDER BY i.created_at DESC
             """, (person_id, cutoff)).fetchall()
             status = db.execute("SELECT source,last_checked,stale FROM api_source_status ORDER BY source").fetchall()
