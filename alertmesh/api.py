@@ -11,6 +11,7 @@ import hmac
 import json
 import math
 import os
+from pathlib import Path
 import re
 import secrets
 import smtplib
@@ -29,6 +30,7 @@ from wsgiref.simple_server import make_server
 
 from .service import AlertMesh, Person, Place, SEVERITY
 from .geocoding import Geocoder, NominatimGeocoder, OSM_ATTRIBUTION, RADIUS_PRESETS_KM
+from .demo import dashboard_snapshot
 
 
 class _DiscardEmail:
@@ -102,8 +104,13 @@ class AlertMeshAPI:
         except Exception:
             response, status = {"error": "Internal server error"}, 500
         self._api_latencies_ms.append((time.perf_counter() - started) * 1000)
-        encoded = json.dumps(response, separators=(",", ":")).encode("utf-8")
-        start_response(f"{status} {HTTPStatus(status).phrase}", [("Content-Type", "application/json; charset=utf-8"), ("Content-Length", str(len(encoded))), ("Cache-Control", "no-store")])
+        if isinstance(response, str):
+            encoded = response.encode("utf-8")
+            content_type = "text/html; charset=utf-8"
+        else:
+            encoded = json.dumps(response, separators=(",", ":")).encode("utf-8")
+            content_type = "application/json; charset=utf-8"
+        start_response(f"{status} {HTTPStatus(status).phrase}", [("Content-Type", content_type), ("Content-Length", str(len(encoded))), ("Cache-Control", "no-store")])
         return [encoded]
 
     @contextmanager
@@ -186,6 +193,11 @@ class AlertMeshAPI:
         return value
 
     def _dispatch(self, method, path, environ, body):
+        if path == "/" and method == "GET":
+            page = Path(__file__).with_name("web").joinpath("index.html")
+            return page.read_text(encoding="utf-8"), 200
+        if path == "/api/demo" and method == "GET":
+            return dashboard_snapshot(), 200
         if path == "/api/register" and method == "POST":
             return self._register(body), 201
         if path == "/api/verify" and method == "POST":

@@ -45,6 +45,72 @@ def seeded_alerts() -> list[Alert]:
     ]
 
 
+def dashboard_snapshot() -> dict:
+    """Build a read-only dashboard fixture without live sources or real email."""
+    mail = DemoEmail()
+    app = AlertMesh(mail, db_path=":memory:")
+    try:
+        person_id = "demo-person"
+        app.add_person(Person(person_id, "demo@example.test", verified=True))
+        home = Place("demo-home", person_id, "Home", 38.0, -77.0, radius_km=30)
+        work = Place("demo-work", person_id, "Work", 38.01, -77.01, radius_km=30)
+        app.add_place(home)
+        app.add_place(work)
+
+        alerts = seeded_alerts()
+        for alert in alerts[:2]:
+            app.ingest(alert, checked_at=NOW)
+        app.ingest(alerts[2], checked_at=NOW)
+        expired = replace(alerts[2], status="expired", ended_at=NOW - timedelta(minutes=20))
+        app.ingest(expired, checked_at=NOW - timedelta(minutes=20))
+        cancelled = Alert("usgs:demo-cancelled", "usgs", "earthquake", "Small quake near the river", NOW,
+                          latitude=38.0, longitude=-77.0)
+        app.ingest(cancelled, checked_at=NOW)
+        app.ingest(replace(cancelled, status="cancelled", ended_at=NOW - timedelta(minutes=8)),
+                   checked_at=NOW - timedelta(minutes=8))
+        cabin = Place("demo-cabin", person_id, "River cabin", 38.02, -77.02, radius_km=30)
+        app.add_place(cabin, active_alerts=alerts[:2])
+
+        app.mark_source_checked("nws", NOW - timedelta(minutes=7))
+        app.mark_source_stale("nws")
+        app.mark_source_checked("usgs", NOW - timedelta(minutes=2))
+
+        places = [
+            {"id": place.id, "name": place.name, "latitude": place.latitude,
+             "longitude": place.longitude, "radius_km": place.radius_km}
+            for place in (home, work, cabin)
+        ]
+        inbox = app.inbox_for(person_id)
+        rendered_alerts = []
+        for entry in inbox:
+            alert = app.alerts[entry.alert_id]
+            rendered_alerts.append({
+                "id": alert.id,
+                "source": alert.source,
+                "hazard": alert.hazard,
+                "title": alert.title,
+                "status": alert.status,
+                "severity": alert.severity,
+                "published_at": alert.published_at.isoformat(),
+                "expected_end": alert.expected_end.isoformat() if alert.expected_end else None,
+                "ended_at": alert.ended_at.isoformat() if alert.ended_at else None,
+                "instructions": alert.instructions,
+                "geometry": alert.geometry,
+                "latitude": alert.latitude,
+                "longitude": alert.longitude,
+                "places": [place for place in places if place["id"] in entry.place_ids],
+                "delivery_status": app.delivery_status.get((person_id, alert.id), "not_sent"),
+            })
+        sources = [
+            {"source": source, "last_checked": app.last_checked[source].isoformat() if source in app.last_checked else None,
+             "stale": app.source_stale.get(source, True)}
+            for source in sorted(set(app.last_checked) | set(app.source_stale))
+        ]
+        return {"person_name": "Demo Person", "places": places, "alerts": rendered_alerts, "sources": sources}
+    finally:
+        app.close()
+
+
 def run_demo() -> dict[str, int]:
     """Seed and replay the demo in a fresh, isolated SQLite database."""
     mail = DemoEmail()

@@ -41,6 +41,8 @@ python -m alertmesh.api
 
 Set `ALERTMESH_DB_PATH` to choose the SQLite file. Email verification is disabled until `ALERTMESH_SMTP_HOST` is configured. SMTP configuration also accepts `ALERTMESH_SMTP_PORT`, `ALERTMESH_SMTP_SENDER`, `ALERTMESH_SMTP_USERNAME`, and `ALERTMESH_SMTP_PASSWORD`. The local server binds to `127.0.0.1:8000`; `ALERTMESH_HOST` and `ALERTMESH_PORT` override that address.
 
+Open <http://127.0.0.1:8000/> to explore the read-only seeded browser demo. Use **Reset demo** to reload its NWS and USGS sample Alerts; the demo makes no live source requests or real email calls. See [the deterministic demo guide](./docs/deterministic-demo.md).
+
 Register with `POST /api/register` using `{"email":"person@example.com","password":"at-least-12-chars"}`. The verification token is sent by email and is submitted to `POST /api/verify` as `{"token":"..."}`. Sign in at `POST /api/login`; use its bearer access token for the remaining endpoints.
 
 - `GET /api/me` and `DELETE /api/me`

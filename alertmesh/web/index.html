@@ -1,0 +1,483 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>AlertMesh — Local demo</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #17353b;
+      --muted: #60777a;
+      --quiet: #8ca0a0;
+      --paper: #f3f6f2;
+      --surface: #fcfdf9;
+      --line: #dce6df;
+      --deep: #13363c;
+      --deep-2: #1b4850;
+      --teal: #4d8783;
+      --teal-wash: #e5efeb;
+      --amber: #bc7922;
+      --amber-wash: #f8edd7;
+      --red: #a54b3d;
+      --red-wash: #f6e5df;
+      --blue: #527982;
+      --blue-wash: #e7eff0;
+      --radius: 15px;
+      --shadow: 0 14px 44px rgba(31, 64, 63, .07);
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: var(--ink);
+      background: var(--paper);
+    }
+
+    * { box-sizing: border-box; }
+    body { margin: 0; min-width: 320px; background: var(--paper); }
+    button { font: inherit; }
+    button:focus-visible, a:focus-visible { outline: 3px solid #d38a2c; outline-offset: 3px; }
+    .shell { min-height: 100vh; }
+    .topbar {
+      min-height: 70px; display: flex; align-items: center; justify-content: space-between;
+      padding: 0 clamp(18px, 4vw, 58px); background: var(--deep); color: #f3f6ee;
+      border-bottom: 1px solid rgba(255,255,255,.12);
+    }
+    .brand { display: flex; align-items: center; gap: 12px; color: inherit; text-decoration: none; }
+    .brand-mark { width: 29px; height: 29px; display: grid; place-items: center; border: 1px solid #7fa9a1; border-radius: 9px 9px 9px 3px; }
+    .brand-mark svg { width: 17px; height: 17px; }
+    .brand-name { font-weight: 650; font-size: 17px; letter-spacing: -.035em; }
+    .topbar-right { display: flex; align-items: center; gap: 14px; }
+    .demo-label { display: inline-flex; align-items: center; gap: 8px; color: #d5e3d9; font-size: 12px; }
+    .demo-label::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: #e6b558; box-shadow: 0 0 0 3px rgba(230,181,88,.16); }
+    .reset-button { border: 1px solid rgba(224,238,229,.32); border-radius: 8px; padding: 8px 12px; color: #f3f6ee; background: transparent; font-size: 12px; cursor: pointer; }
+    .reset-button:hover { background: rgba(255,255,255,.08); }
+
+    main { max-width: 1500px; margin: auto; padding: 34px clamp(16px, 3vw, 42px) 54px; }
+    .intro { display: flex; justify-content: space-between; align-items: end; gap: 22px; margin-bottom: 25px; }
+    h1, h2, h3, p { margin-top: 0; }
+    h1 { margin-bottom: 7px; color: var(--deep); font-family: Georgia, "Times New Roman", serif; font-weight: 500; font-size: clamp(31px, 3.5vw, 43px); line-height: 1.08; letter-spacing: -.045em; }
+    .intro-copy { margin: 0; max-width: 540px; color: var(--muted); font-size: 14px; line-height: 1.55; }
+    .snapshot { color: var(--muted); font-size: 12px; white-space: nowrap; padding-bottom: 3px; }
+    .snapshot strong { color: var(--ink); font-weight: 620; }
+
+    .source-strip { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; margin-bottom: 18px; overflow: hidden; border: 1px solid var(--line); border-radius: 11px; background: var(--line); }
+    .source-item { display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 10px 15px; background: var(--surface); }
+    .source-signal { width: 8px; height: 8px; flex: 0 0 auto; border-radius: 50%; background: #4e9481; }
+    .source-signal.stale { background: #d49532; }
+    .source-copy { min-width: 0; display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+    .source-name { font-size: 12px; font-weight: 650; color: var(--ink); }
+    .source-note { font-size: 12px; color: var(--muted); }
+    .source-state { margin-left: auto; font-size: 11px; color: var(--muted); white-space: nowrap; }
+
+    .workspace { display: grid; grid-template-columns: minmax(180px, 220px) minmax(330px, 1fr) minmax(275px, 340px); align-items: start; gap: 18px; }
+    .rail, .detail { min-width: 0; }
+    .section-heading { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 12px; }
+    .section-heading h2 { margin: 0; color: var(--deep); font-size: 15px; font-weight: 680; letter-spacing: -.015em; }
+    .section-count { color: var(--quiet); font-size: 11px; }
+    .places-list { display: grid; gap: 7px; }
+    .place-row { width: 100%; display: grid; grid-template-columns: 10px 1fr auto; align-items: center; gap: 9px; padding: 10px 9px; border: 1px solid transparent; border-radius: 9px; color: var(--ink); text-align: left; background: transparent; }
+    .place-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--teal); }
+    .place-name { font-size: 12px; font-weight: 570; }
+    .place-match-count { color: var(--muted); font-size: 11px; }
+    .place-row:hover { background: rgba(255,255,255,.64); }
+    .place-row.active { border-color: #b8d1c8; background: #eaf2ed; }
+    .rail-rule { height: 1px; margin: 21px 0 17px; background: var(--line); }
+    .source-list { display: grid; gap: 12px; }
+    .source-mini { display: grid; grid-template-columns: 8px 1fr; gap: 9px; align-items: start; }
+    .source-mini .source-signal { margin-top: 4px; width: 7px; height: 7px; }
+    .source-mini strong { display: block; margin-bottom: 2px; font-size: 11px; font-weight: 650; }
+    .source-mini span { color: var(--muted); font-size: 11px; line-height: 1.4; }
+    .rail-note { margin: 20px 0 0; padding-top: 13px; border-top: 1px solid var(--line); color: var(--quiet); font-size: 11px; line-height: 1.5; }
+
+    .feed { min-width: 0; }
+    .feed-header { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 12px; }
+    .feed-header .section-heading { margin: 0; }
+    .filters { display: flex; align-items: center; gap: 4px; padding: 3px; border: 1px solid var(--line); border-radius: 9px; background: #eaf0eb; }
+    .filter-button { border: 0; border-radius: 6px; padding: 6px 9px; background: transparent; color: var(--muted); font-size: 11px; cursor: pointer; }
+    .filter-button[aria-pressed="true"] { background: var(--surface); color: var(--deep); box-shadow: 0 1px 2px rgba(20,54,60,.1); }
+    .alert-list { display: grid; gap: 8px; }
+    .alert-card { width: 100%; min-width: 0; display: grid; grid-template-columns: 4px minmax(0,1fr) auto; gap: 12px; align-items: stretch; padding: 0; overflow: hidden; text-align: left; border: 1px solid var(--line); border-radius: 11px; color: var(--ink); background: var(--surface); cursor: pointer; transition: border-color .15s ease, background .15s ease; }
+    .alert-card:hover { border-color: #a8c3b7; background: #fff; }
+    .alert-card[aria-pressed="true"] { border-color: #79a49a; box-shadow: 0 0 0 1px #79a49a; }
+    .severity-bar { background: var(--amber); }
+    .alert-card[data-severity="extreme"] .severity-bar, .alert-card[data-severity="severe"] .severity-bar { background: var(--red); }
+    .alert-card[data-hazard="earthquake"] .severity-bar { background: var(--blue); }
+    .alert-card[data-status="cancelled"] .severity-bar, .alert-card[data-status="expired"] .severity-bar { background: #8b9996; }
+    .alert-content { padding: 13px 0 12px; min-width: 0; }
+    .alert-meta { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-bottom: 5px; }
+    .tag { display: inline-flex; align-items: center; padding: 3px 7px; border-radius: 5px; background: var(--teal-wash); color: #36625f; font-size: 10px; font-weight: 650; }
+    .tag.weather { background: var(--amber-wash); color: #815117; }
+    .tag.quake { background: var(--blue-wash); color: #3f646d; }
+    .tag.terminal { background: #edf0ed; color: #596b69; }
+    .alert-title { display: block; overflow: hidden; color: var(--deep); font-size: 13px; font-weight: 650; line-height: 1.35; text-overflow: ellipsis; }
+    .alert-subline { display: block; margin-top: 5px; color: var(--muted); font-size: 11px; line-height: 1.4; }
+    .alert-time { padding: 14px 12px 12px 0; color: var(--quiet); font-size: 10px; white-space: nowrap; }
+    .empty-state { padding: 24px 18px; border: 1px dashed #bbc9c1; border-radius: 11px; color: var(--muted); background: rgba(255,255,255,.45); font-size: 13px; line-height: 1.5; }
+
+    .detail-card { position: sticky; top: 16px; overflow: hidden; border: 1px solid var(--line); border-radius: 13px; background: var(--surface); box-shadow: var(--shadow); }
+    .detail-top { padding: 17px 17px 14px; border-bottom: 1px solid var(--line); }
+    .detail-top .alert-meta { margin-bottom: 9px; }
+    .detail-top h2 { margin: 0; color: var(--deep); font-family: Georgia, "Times New Roman", serif; font-size: 24px; font-weight: 500; line-height: 1.16; letter-spacing: -.03em; }
+    .detail-summary { margin: 9px 0 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
+    .map-wrap { padding: 13px 15px 11px; background: #eef3ee; border-bottom: 1px solid var(--line); }
+    .map-topline { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 7px; }
+    .map-topline strong { font-size: 11px; font-weight: 650; }
+    .map-topline span { color: var(--muted); font-size: 10px; }
+    .footprint-map { display: block; width: 100%; height: 142px; border: 1px solid #d5e1d9; border-radius: 8px; background: #e5eee8; }
+    .map-caption { margin: 7px 0 0; color: var(--muted); font-size: 10px; line-height: 1.45; }
+    .detail-section { padding: 14px 17px; border-bottom: 1px solid var(--line); }
+    .detail-section:last-child { border-bottom: 0; }
+    .detail-section h3 { margin: 0 0 9px; color: var(--muted); font-size: 10px; font-weight: 700; letter-spacing: .02em; }
+    .matched-places { display: flex; flex-wrap: wrap; gap: 6px; }
+    .matched-place { padding: 5px 8px; border-radius: 6px; background: #e9f1ed; color: #355e58; font-size: 11px; }
+    .instruction { margin: 0; color: var(--ink); font-size: 12px; line-height: 1.55; }
+    .detail-facts { display: grid; grid-template-columns: 1fr 1fr; gap: 11px 12px; }
+    .fact span { display: block; margin-bottom: 3px; color: var(--quiet); font-size: 10px; }
+    .fact strong { display: block; color: var(--ink); font-size: 11px; font-weight: 620; line-height: 1.4; }
+    .delivery-state { display: inline-flex; align-items: center; gap: 7px; color: var(--muted); font-size: 11px; }
+    .delivery-state::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: #4d8d72; }
+    .delivery-state.failed::before { background: var(--red); }
+    .delivery-state.not_sent::before { background: #a7b4b0; }
+    .loading { min-height: 240px; display: grid; place-items: center; color: var(--muted); font-size: 13px; }
+    .error-state { padding: 24px; border: 1px solid #e3b5aa; border-radius: 12px; background: #fff7f3; color: #713c33; }
+    .error-state p { margin: 0 0 12px; font-size: 13px; line-height: 1.5; }
+    .error-state button { border: 1px solid #c78475; border-radius: 7px; padding: 7px 10px; background: #fff; color: #713c33; cursor: pointer; }
+    .footer-note { margin: 22px 0 0; color: var(--quiet); font-size: 10px; text-align: right; }
+
+    @media (max-width: 1100px) {
+      .workspace { grid-template-columns: minmax(170px, 205px) minmax(320px, 1fr); }
+      .detail { grid-column: 2; }
+      .detail-card { position: static; display: grid; grid-template-columns: 1fr 1fr; }
+      .detail-top, .map-wrap { border-bottom: 1px solid var(--line); }
+      .detail-section { border-bottom: 0; }
+      .detail-section:nth-last-child(2) { border-bottom: 0; }
+    }
+    @media (max-width: 700px) {
+      .topbar { min-height: 60px; padding-inline: 15px; }
+      .brand-name { font-size: 16px; }
+      .demo-label { font-size: 11px; }
+      .reset-button { padding: 7px 9px; }
+      main { padding: 25px 14px 36px; }
+      .intro { display: block; margin-bottom: 18px; }
+      .snapshot { margin-top: 9px; white-space: normal; }
+      .source-strip { grid-template-columns: 1fr; }
+      .source-item { min-height: 50px; }
+      .workspace { grid-template-columns: 1fr; gap: 22px; }
+      .rail { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; align-items: start; }
+      .rail > .section-heading { grid-column: 1 / -1; margin-bottom: -7px; }
+      .places-list { grid-column: 1 / -1; grid-template-columns: repeat(3, minmax(0,1fr)); }
+      .place-row { grid-template-columns: 8px 1fr; padding: 8px 6px; gap: 6px; }
+      .place-match-count { grid-column: 2; }
+      .rail-rule { display: none; }
+      .source-list { grid-column: 1 / -1; grid-template-columns: 1fr 1fr; padding-top: 10px; border-top: 1px solid var(--line); }
+      .rail-note { display: none; }
+      .feed-header { align-items: flex-start; flex-direction: column; }
+      .filters { width: 100%; overflow-x: auto; }
+      .filter-button { flex: 1 0 auto; }
+      .detail { grid-column: auto; }
+      .detail-card { display: block; }
+      .detail-top, .map-wrap { border-bottom: 1px solid var(--line); }
+      .detail-section { border-bottom: 1px solid var(--line); }
+      .alert-time { padding-right: 9px; font-size: 9px; }
+      .footer-note { text-align: left; }
+    }
+    @media (max-width: 390px) {
+      .topbar-right { gap: 8px; }
+      .demo-label { font-size: 0; gap: 0; }
+      .demo-label::before { width: 8px; height: 8px; }
+      .places-list { grid-template-columns: 1fr; }
+      .place-row { grid-template-columns: 9px 1fr auto; }
+      .place-match-count { grid-column: auto; }
+      .alert-card { gap: 8px; }
+      .alert-time { font-size: 0; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <header class="topbar">
+      <a class="brand" href="/" aria-label="AlertMesh home">
+        <span class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none"><path d="M4 16.5 8.2 12l3.2 3.1L20 6.5M14.7 6.5H20v5.3" stroke="#dcebe2" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </span>
+        <span class="brand-name">AlertMesh</span>
+      </a>
+      <div class="topbar-right">
+        <span class="demo-label">Local demo</span>
+        <button class="reset-button" id="reset-demo" type="button">Reset demo</button>
+      </div>
+    </header>
+    <main>
+      <section class="intro" aria-labelledby="page-title">
+        <div>
+          <h1 id="page-title">Your places, in view.</h1>
+          <p class="intro-copy">A quiet look at the weather and ground movement around the places you care about.</p>
+        </div>
+        <p class="snapshot" id="snapshot-time" aria-live="polite">Loading the local snapshot…</p>
+      </section>
+
+      <div id="app-state" class="loading" role="status">Loading seeded demo data…</div>
+      <div id="dashboard" hidden>
+        <section class="source-strip" id="source-strip" aria-label="Source freshness"></section>
+        <div class="workspace">
+          <aside class="rail" aria-label="Places and source status">
+            <div class="section-heading">
+              <h2>Places</h2>
+              <span class="section-count" id="place-count"></span>
+            </div>
+            <div class="places-list" id="places-list"></div>
+            <div class="rail-rule" aria-hidden="true"></div>
+            <div class="section-heading">
+              <h2>Source watch</h2>
+            </div>
+            <div class="source-list" id="source-list"></div>
+            <p class="rail-note">Seeded source data only. No live feed or email connection is used in this demo.</p>
+          </aside>
+
+          <section class="feed" aria-labelledby="inbox-heading">
+            <div class="feed-header">
+              <div class="section-heading">
+                <h2 id="inbox-heading">Inbox</h2>
+                <span class="section-count" id="alert-count"></span>
+              </div>
+              <div class="filters" role="group" aria-label="Filter Alerts">
+                <button class="filter-button" type="button" data-filter="all" aria-pressed="true">All</button>
+                <button class="filter-button" type="button" data-filter="active" aria-pressed="false">Active</button>
+                <button class="filter-button" type="button" data-filter="weather" aria-pressed="false">Weather</button>
+                <button class="filter-button" type="button" data-filter="earthquake" aria-pressed="false">Earthquakes</button>
+                <button class="filter-button" type="button" data-filter="history" aria-pressed="false">History</button>
+              </div>
+            </div>
+            <div class="alert-list" id="alert-list" aria-live="polite"></div>
+          </section>
+
+          <aside class="detail" aria-label="Selected Alert details" id="detail-panel"></aside>
+        </div>
+        <p class="footer-note">Read-only demo · Refresh to reset the seeded snapshot</p>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    (() => {
+      const state = { data: null, filter: "all", selectedId: null, selectedPlace: null };
+      const appState = document.getElementById("app-state");
+      const dashboard = document.getElementById("dashboard");
+      const sourceLabels = { nws: "National Weather Service", usgs: "USGS earthquakes" };
+
+      const escapeHtml = (value) => String(value ?? "").replace(/[&<>"']/g, char => ({
+        "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+      })[char]);
+
+      const formatTime = (value) => {
+        if (!value) return "Not checked yet";
+        return new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" }).format(new Date(value));
+      };
+
+      const relativeTime = (value) => {
+        if (!value) return "Time unavailable";
+        const minutes = Math.max(0, Math.round((Date.now() - new Date(value).getTime()) / 60000));
+        if (minutes < 1) return "Just now";
+        if (minutes < 60) return `${minutes} min ago`;
+        const hours = Math.round(minutes / 60);
+        return `${hours} hr${hours === 1 ? "" : "s"} ago`;
+      };
+
+      const sourceName = source => sourceLabels[source] || source.toUpperCase();
+      const statusLabel = status => ({ active: "Active", expired: "Expired", cancelled: "Canceled", unknown: "Status unknown" }[status] || status);
+      const severityLabel = severity => severity === "unknown" ? "Severity unknown" : `${severity[0].toUpperCase()}${severity.slice(1)}`;
+
+      async function loadDemo() {
+        appState.hidden = false;
+        appState.className = "loading";
+        appState.textContent = "Loading seeded demo data…";
+        dashboard.hidden = true;
+        try {
+          const response = await fetch("/api/demo", { cache: "no-store", headers: { Accept: "application/json" } });
+          if (!response.ok) throw new Error(`The demo data request returned ${response.status}.`);
+          state.data = await response.json();
+          state.filter = "all";
+          state.selectedPlace = null;
+          state.selectedId = state.data.alerts.find(alert => alert.status === "active")?.id || state.data.alerts[0]?.id || null;
+          appState.hidden = true;
+          dashboard.hidden = false;
+          render();
+        } catch (error) {
+          appState.className = "error-state";
+          appState.innerHTML = `<p>${escapeHtml(error.message || "The local demo could not load.")}</p><button id="retry-demo" type="button">Try again</button>`;
+          document.getElementById("retry-demo").addEventListener("click", loadDemo);
+        }
+      }
+
+      function visibleAlerts() {
+        const alerts = state.data.alerts.filter(alert => !state.selectedPlace || alert.places.some(place => place.id === state.selectedPlace));
+        if (state.filter === "active") return alerts.filter(alert => alert.status === "active");
+        if (state.filter === "history") return alerts.filter(alert => ["expired", "cancelled"].includes(alert.status));
+        if (state.filter === "weather" || state.filter === "earthquake") return alerts.filter(alert => alert.hazard === state.filter);
+        return alerts;
+      }
+
+      function renderSources() {
+        const strip = document.getElementById("source-strip");
+        const list = document.getElementById("source-list");
+        strip.innerHTML = state.data.sources.map(source => `
+          <div class="source-item">
+            <span class="source-signal ${source.stale ? "stale" : ""}" aria-hidden="true"></span>
+            <div class="source-copy"><span class="source-name">${escapeHtml(sourceName(source.source))}</span>
+              <span class="source-note">${source.stale ? "Data may be delayed" : "Feed is current"}</span></div>
+            <span class="source-state">Checked ${escapeHtml(formatTime(source.last_checked))}</span>
+          </div>`).join("");
+        list.innerHTML = state.data.sources.map(source => `
+          <div class="source-mini">
+            <span class="source-signal ${source.stale ? "stale" : ""}" aria-hidden="true"></span>
+            <div><strong>${escapeHtml(sourceName(source.source))}</strong>
+              <span>${source.stale ? `Last checked ${escapeHtml(relativeTime(source.last_checked))}` : `Current · checked ${escapeHtml(formatTime(source.last_checked))}`}</span></div>
+          </div>`).join("");
+      }
+
+      function renderPlaces() {
+        document.getElementById("place-count").textContent = `${state.data.places.length} monitored`;
+        document.getElementById("places-list").innerHTML = state.data.places.map(place => {
+          const count = state.data.alerts.filter(alert => alert.places.some(match => match.id === place.id)).length;
+          const active = state.selectedPlace === place.id;
+          return `<button type="button" class="place-row ${active ? "active" : ""}" data-place="${escapeHtml(place.id)}" aria-pressed="${active}">
+            <span class="place-dot" aria-hidden="true"></span><span class="place-name">${escapeHtml(place.name)}</span><span class="place-match-count">${count} matches</span>
+          </button>`;
+        }).join("");
+      }
+
+      function renderFilters() {
+        document.querySelectorAll(".filter-button").forEach(button => {
+          button.setAttribute("aria-pressed", String(button.dataset.filter === state.filter));
+        });
+      }
+
+      function renderFeed() {
+        const alerts = visibleAlerts();
+        document.getElementById("alert-count").textContent = `${alerts.length} ${alerts.length === 1 ? "entry" : "entries"}`;
+        const list = document.getElementById("alert-list");
+        if (!alerts.length) {
+          list.innerHTML = `<div class="empty-state">No Alerts match this view. Choose another filter or clear the Place selection.</div>`;
+          return;
+        }
+        list.innerHTML = alerts.map(alert => {
+          const selected = alert.id === state.selectedId;
+          const places = alert.places.map(place => place.name).join(", ");
+          const tagClass = alert.status === "active" ? (alert.hazard === "weather" ? "weather" : "quake") : "terminal";
+          return `<button type="button" class="alert-card" data-alert="${escapeHtml(alert.id)}" data-severity="${escapeHtml(alert.severity)}" data-hazard="${escapeHtml(alert.hazard)}" data-status="${escapeHtml(alert.status)}" aria-pressed="${selected}">
+            <span class="severity-bar" aria-hidden="true"></span>
+            <span class="alert-content"><span class="alert-meta">
+              <span class="tag ${tagClass}">${escapeHtml(statusLabel(alert.status))}</span>
+              <span class="tag ${alert.hazard === "weather" ? "weather" : "quake"}">${alert.hazard === "weather" ? "Weather" : "Earthquake"}</span>
+            </span><span class="alert-title">${escapeHtml(alert.title)}</span>
+            <span class="alert-subline">${escapeHtml(severityLabel(alert.severity))} · ${escapeHtml(places || "No current Place match")}</span></span>
+            <span class="alert-time">${escapeHtml(relativeTime(alert.published_at))}</span>
+          </button>`;
+        }).join("");
+      }
+
+      function mapMarkup(alert) {
+        const places = alert.places;
+        const coordinates = alert.geometry?.coordinates?.[0] || [];
+        const points = coordinates.length ? coordinates : places.map(place => [place.longitude, place.latitude]);
+        if (!points.length) return `<div class="empty-state">No location detail is available for this Alert.</div>`;
+        const lons = points.map(point => point[0]);
+        const lats = points.map(point => point[1]);
+        let minLon = Math.min(...lons), maxLon = Math.max(...lons), minLat = Math.min(...lats), maxLat = Math.max(...lats);
+        const lonPad = Math.max((maxLon - minLon) * .12, .025), latPad = Math.max((maxLat - minLat) * .12, .025);
+        minLon -= lonPad; maxLon += lonPad; minLat -= latPad; maxLat += latPad;
+        const xy = (lon, lat) => `${18 + (lon - minLon) / (maxLon - minLon) * 284},${153 - (lat - minLat) / (maxLat - minLat) * 126}`;
+        const polygon = alert.geometry ? coordinates.map(([lon, lat]) => xy(lon, lat)).join(" ") : "";
+        const placeDots = places.map(place => {
+          const [x, y] = xy(place.longitude, place.latitude).split(",");
+          return `<g><circle cx="${x}" cy="${y}" r="5.5" fill="#fcfdf9" stroke="#2b6966" stroke-width="2"/><text x="${Number(x) + 8}" y="${Number(y) + 3}" font-size="9" fill="#294d50">${escapeHtml(place.name)}</text></g>`;
+        }).join("");
+        const quake = alert.hazard === "earthquake" && alert.latitude != null
+          ? `<circle cx="${xy(alert.longitude, alert.latitude).split(",")[0]}" cy="${xy(alert.longitude, alert.latitude).split(",")[1]}" r="14" fill="rgba(76,119,128,.12)" stroke="#587f86" stroke-width="1.5" stroke-dasharray="3 3"/>`
+          : "";
+        return `<svg class="footprint-map" viewBox="0 0 320 170" role="img" aria-label="Simplified Alert footprint and matching Places">
+          <path d="M0 42H320M0 84H320M0 126H320M64 0V170M128 0V170M192 0V170M256 0V170" stroke="#d4e1d9" stroke-width="1"/>
+          <path d="M0 149 C55 117 79 152 126 114 S216 95 320 115M0 59 C48 76 86 45 142 59 S229 84 320 42" fill="none" stroke="#c4d7ce" stroke-width="1.3"/>
+          ${polygon ? `<polygon points="${polygon}" fill="rgba(184,113,48,.18)" stroke="#ad6c2e" stroke-width="2" stroke-linejoin="round"/>` : ""}
+          ${quake}${placeDots}
+        </svg>`;
+      }
+
+      function renderDetail() {
+        const alert = state.data.alerts.find(item => item.id === state.selectedId);
+        const panel = document.getElementById("detail-panel");
+        if (!alert) {
+          panel.innerHTML = `<div class="detail-card"><div class="empty-state">Choose an Inbox entry to see its details.</div></div>`;
+          return;
+        }
+        const stateClass = alert.delivery_status === "failed" ? "failed" : alert.delivery_status === "not_sent" ? "not_sent" : "";
+        const expected = alert.expected_end ? formatTime(alert.expected_end) : "Not provided";
+        const ended = alert.ended_at ? formatTime(alert.ended_at) : "Still active";
+        const whenEnded = alert.status === "active" ? `Ends ${expected}` : `${statusLabel(alert.status)} at ${ended}`;
+        panel.innerHTML = `<article class="detail-card">
+          <header class="detail-top"><div class="alert-meta">
+            <span class="tag ${alert.status === "active" ? (alert.hazard === "weather" ? "weather" : "quake") : "terminal"}">${escapeHtml(statusLabel(alert.status))}</span>
+            <span class="tag ${alert.hazard === "weather" ? "weather" : "quake"}">${escapeHtml(sourceName(alert.source))}</span>
+          </div><h2>${escapeHtml(alert.title)}</h2>
+          <p class="detail-summary">${escapeHtml(severityLabel(alert.severity))} · ${escapeHtml(whenEnded)}</p></header>
+          <section class="map-wrap"><div class="map-topline"><strong>Where it reaches</strong><span>Approximate source area</span></div>
+            ${mapMarkup(alert)}<p class="map-caption">The outline is a simplified view of source geography. Place markers show the matches.</p></section>
+          <section class="detail-section"><h3>Matching Places</h3><div class="matched-places">${alert.places.length
+            ? alert.places.map(place => `<span class="matched-place">${escapeHtml(place.name)}</span>`).join("")
+            : `<span class="source-note">No matching Places</span>`}</div></section>
+          <section class="detail-section"><h3>Guidance</h3><p class="instruction">${escapeHtml(alert.instructions || "No additional instructions were provided by the source.")}</p></section>
+          <section class="detail-section"><div class="detail-facts">
+            <div class="fact"><span>Published</span><strong>${escapeHtml(formatTime(alert.published_at))}</strong></div>
+            <div class="fact"><span>Source</span><strong>${escapeHtml(sourceName(alert.source))}</strong></div>
+            <div class="fact"><span>Email status</span><strong class="delivery-state ${stateClass}">${escapeHtml(alert.delivery_status.replaceAll("_", " "))}</strong></div>
+            <div class="fact"><span>Alert state</span><strong>${escapeHtml(statusLabel(alert.status))}</strong></div>
+          </div></section>
+        </article>`;
+      }
+
+      function renderSnapshotTime() {
+        const times = state.data.sources.map(source => source.last_checked).filter(Boolean).sort();
+        document.getElementById("snapshot-time").innerHTML = `Sample snapshot · <strong>${escapeHtml(formatTime(times[times.length - 1]))}</strong>`;
+      }
+
+      function render() {
+        renderSources();
+        renderPlaces();
+        renderFilters();
+        renderFeed();
+        renderDetail();
+        renderSnapshotTime();
+      }
+
+      document.getElementById("reset-demo").addEventListener("click", loadDemo);
+      document.querySelectorAll(".filter-button").forEach(button => button.addEventListener("click", () => {
+        state.filter = button.dataset.filter;
+        renderFilters();
+        renderFeed();
+        if (!visibleAlerts().some(alert => alert.id === state.selectedId)) {
+          state.selectedId = visibleAlerts()[0]?.id || null;
+          renderFeed();
+          renderDetail();
+        }
+      }));
+      document.getElementById("places-list").addEventListener("click", event => {
+        const button = event.target.closest("[data-place]");
+        if (!button) return;
+        state.selectedPlace = state.selectedPlace === button.dataset.place ? null : button.dataset.place;
+        const visible = visibleAlerts();
+        if (!visible.some(alert => alert.id === state.selectedId)) state.selectedId = visible[0]?.id || null;
+        renderPlaces(); renderFeed(); renderDetail();
+      });
+      document.getElementById("alert-list").addEventListener("click", event => {
+        const button = event.target.closest("[data-alert]");
+        if (!button) return;
+        state.selectedId = button.dataset.alert;
+        renderFeed(); renderDetail();
+      });
+      loadDemo();
+    })();
+  </script>
+</body>
+</html>
