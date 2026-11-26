@@ -58,11 +58,19 @@ def run_demo() -> dict[str, int]:
         for alert in alerts[:2]:
             app.ingest(alert, checked_at=NOW)
         app.ingest(alerts[2], checked_at=NOW)
+        cancelled_alert = Alert("usgs:demo-cancelled", "usgs", "earthquake", "Demo cancelled earthquake", NOW,
+                                latitude=38.0, longitude=-77.0)
+        app.ingest(cancelled_alert, checked_at=NOW)
+        app.ingest(replace(cancelled_alert, status="cancelled", ended_at=NOW), checked_at=NOW)
         # Replaying the same source snapshot is idempotent for inbox and email.
         original_email_count = len(mail.messages)
+        original_inbox_count = len(app.inbox_for("demo-person"))
         for alert in alerts[:2]:
             app.ingest(alert, checked_at=NOW)
         duplicate_email_count = len(mail.messages)
+        duplicate_inbox_count = len(app.inbox_for("demo-person"))
+        if (duplicate_inbox_count, duplicate_email_count) != (original_inbox_count, original_email_count):
+            raise AssertionError("Replaying source alerts changed inbox or initial email counts")
 
         # An active alert discovered after a Place is added is visible without
         # sending a backdated message.
@@ -87,6 +95,7 @@ def run_demo() -> dict[str, int]:
         app.ingest(expired_revision, checked_at=NOW + timedelta(minutes=1))
         replay_inbox_before_delete = app.inbox_for("demo-person")
         terminal_retained = any(e.alert_id == "usgs:demo-expired" for e in replay_inbox_before_delete)
+        cancellation_retained = any(e.alert_id == "usgs:demo-cancelled" for e in replay_inbox_before_delete)
         retry_sent = app.delivery_status.get(("demo-person", "usgs:demo-retry")) == "sent"
         quake_entry = next(e for e in replay_inbox_before_delete if e.alert_id == "usgs:demo-quake")
 
@@ -96,7 +105,8 @@ def run_demo() -> dict[str, int]:
         app.delete_person("demo-person")
         after_account_delete = app.inbox_for("demo-person")
         return {
-            "inbox_entries_after_replay": len(replay_inbox_before_delete),
+            "inbox_entries_after_replay": duplicate_inbox_count,
+            "inbox_entries_before_replay": original_inbox_count,
             "email_messages_after_replay": duplicate_email_count,
             "initial_email_count": original_email_count,
             "quake_matching_places": len(quake_entry.place_ids),
@@ -105,6 +115,7 @@ def run_demo() -> dict[str, int]:
             "account_delete_remaining_entries": len(after_account_delete),
             "source_was_stale": int(bool(stale)),
             "expired_alert_retained": int(terminal_retained),
+            "cancelled_alert_retained": int(cancellation_retained),
             "retry_delivery_sent": int(retry_sent),
         }
     finally:
